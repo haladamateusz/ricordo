@@ -6,6 +6,7 @@ describe('formatCaptionDate', () => {
   it('prints a selected date in Polish', () => {
     expect(formatCaptionDate('2026-09-12')).toBe('12 września 2026');
     expect(formatCaptionDate('1999-01-03')).toBe('3 stycznia 1999');
+    expect(formatCaptionDate('2025-10-31')).toBe('31 października 2025');
   });
 
   it('prints nothing when no date is selected', () => {

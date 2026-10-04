@@ -1,4 +1,11 @@
-import { captionFontScale, coverCrop, type FrameLayout } from './frame-layout';
+import { longestCaptionDate } from './date-picker';
+import {
+  captionFontScale,
+  captionGapMm,
+  coverCrop,
+  mmToPx,
+  type FrameLayout,
+} from './frame-layout';
 
 const CAPTION_FONT_FAMILY = 'Geist, sans-serif';
 
@@ -45,11 +52,15 @@ export function paintFrame(
 
   ctx.fillStyle = '#000000';
   ctx.textBaseline = 'middle';
+  ctx.font = `400 ${layout.captionFontSizePx}px ${CAPTION_FONT_FAMILY}`;
+  const dateSlot = Math.ceil(ctx.measureText(longestCaptionDate).width);
+  const captionGap = Math.round(mmToPx(captionGapMm));
+  const rightCaptionMaxWidth = Math.max(0, photo.width - dateSlot - captionGap);
   paintCaption(
     ctx,
     leftCaption,
     layout.captionFontSizePx,
-    layout.leftCaptionMaxWidth,
+    dateSlot,
     'left',
     layout.leftCaptionX,
     layout.captionCenterY,
@@ -58,7 +69,7 @@ export function paintFrame(
     ctx,
     rightCaption,
     layout.captionFontSizePx,
-    layout.rightCaptionMaxWidth,
+    rightCaptionMaxWidth,
     'right',
     layout.rightCaptionX,
     layout.captionCenterY,

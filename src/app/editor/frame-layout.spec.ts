@@ -34,8 +34,6 @@ describe('frame layout', () => {
     const bandTop = layout.borderOuter.y + layout.borderOuter.height;
     expect(layout.captionCenterY).toBe(bandTop + Math.round((layout.canvas.height - bandTop) / 2));
     expect(layout.captionCenterY).toBeGreaterThan(layout.photo.y + layout.photo.height);
-    expect(layout.leftCaptionMaxWidth).toBeGreaterThan(0);
-    expect(layout.rightCaptionMaxWidth).toBeGreaterThan(0);
   });
 
   it('uses a 10 by 15 card for a portrait photo', () => {

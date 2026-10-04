@@ -6,6 +6,7 @@ const PAD_TOP_MM = 10 / 3;
 const PAD_SIDE_MM = 10 / 3;
 const PAD_BOTTOM_MM = 28 / 3;
 const CAPTION_SIZE_MM = 3.5;
+export const captionGapMm = 4;
 
 export type Orientation = 'landscape' | 'portrait';
 
@@ -36,8 +37,6 @@ export interface FrameLayout {
   captionCenterY: number;
   leftCaptionX: number;
   rightCaptionX: number;
-  leftCaptionMaxWidth: number;
-  rightCaptionMaxWidth: number;
 }
 
 export interface CoverCrop {
@@ -107,8 +106,6 @@ export function buildFrameLayout(orientation: Orientation, dpi = EXPORT_DPI): Fr
     width: photoWidth + border * 2,
     height: photoHeight + border * 2,
   };
-  const photoCenterX = photo.x + photo.width / 2;
-
   const bandTop = borderOuter.y + borderOuter.height;
 
   return {
@@ -120,8 +117,6 @@ export function buildFrameLayout(orientation: Orientation, dpi = EXPORT_DPI): Fr
     captionCenterY: bandTop + Math.round((canvasHeight - bandTop) / 2),
     leftCaptionX: photo.x,
     rightCaptionX: photo.x + photo.width,
-    leftCaptionMaxWidth: photoCenterX - photo.x,
-    rightCaptionMaxWidth: photo.x + photo.width - photoCenterX,
   };
 }
 
