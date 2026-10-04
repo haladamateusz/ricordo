@@ -75,7 +75,7 @@ export class PhotoEditor {
   protected readonly layout = computed(() => buildFrameLayout(this.orientation()));
 
   protected readonly frameAspect = computed(() => {
-    const { width, height } = this.layout().canvas;
+    const { width, height } = this.layout().trim;
     return `${width} / ${height}`;
   });
 
@@ -85,17 +85,28 @@ export class PhotoEditor {
   });
 
   protected readonly frameRatio = computed(() => {
-    const { width, height } = this.layout().canvas;
+    const { width, height } = this.layout().trim;
     return width / height;
+  });
+
+  protected readonly canvasFrame = computed(() => {
+    const { canvas, trim } = this.layout();
+    return {
+      left: (-trim.x / trim.width) * 100,
+      top: (-trim.y / trim.height) * 100,
+      width: (canvas.width / trim.width) * 100,
+      height: (canvas.height / trim.height) * 100,
+    };
   });
 
   protected readonly photoBox = computed(() => {
     const layout = this.layout();
+    const { trim } = layout;
     return {
-      x: (layout.photo.x / layout.canvas.width) * 100,
-      y: (layout.photo.y / layout.canvas.height) * 100,
-      width: (layout.photo.width / layout.canvas.width) * 100,
-      height: (layout.photo.height / layout.canvas.height) * 100,
+      x: ((layout.photo.x - trim.x) / trim.width) * 100,
+      y: ((layout.photo.y - trim.y) / trim.height) * 100,
+      width: (layout.photo.width / trim.width) * 100,
+      height: (layout.photo.height / trim.height) * 100,
     };
   });
 

@@ -7,6 +7,11 @@ const PAD_SIDE_MM = 10 / 3;
 const PAD_BOTTOM_MM = 28 / 3;
 const CAPTION_SIZE_MM = 3.5;
 export const captionGapMm = 4;
+/**
+ * Edge the CEWE Fotojoker exposure mask can leave unprinted.
+ * https://www.cewe.pl/FAQ.html
+ */
+export const bleedMm = 4;
 
 export type Orientation = 'landscape' | 'portrait';
 
@@ -30,6 +35,7 @@ interface Rect {
 
 export interface FrameLayout {
   canvas: { width: number; height: number };
+  trim: Rect;
   photo: Rect;
   borderOuter: Rect;
   borderWidthPx: number;
@@ -86,9 +92,10 @@ export function clampUnit(value: number): number {
 
 export function buildFrameLayout(orientation: Orientation, dpi = EXPORT_DPI): FrameLayout {
   const spec = frameSpec(orientation);
-  const padSide = Math.round(mmToPx(spec.padSideMm, dpi));
-  const padTop = Math.round(mmToPx(spec.padTopMm, dpi));
-  const padBottom = Math.round(mmToPx(spec.padBottomMm, dpi));
+  const bleed = Math.round(mmToPx(bleedMm, dpi));
+  const padSide = bleed + Math.round(mmToPx(spec.padSideMm, dpi));
+  const padTop = bleed + Math.round(mmToPx(spec.padTopMm, dpi));
+  const padBottom = bleed + Math.round(mmToPx(spec.padBottomMm, dpi));
   const border = Math.round(mmToPx(spec.borderMm, dpi));
   const canvasWidth = Math.round(mmToPx(spec.cardWidthMm, dpi));
   const canvasHeight = Math.round(mmToPx(spec.cardHeightMm, dpi));
@@ -107,14 +114,21 @@ export function buildFrameLayout(orientation: Orientation, dpi = EXPORT_DPI): Fr
     height: photoHeight + border * 2,
   };
   const bandTop = borderOuter.y + borderOuter.height;
+  const trim: Rect = {
+    x: bleed,
+    y: bleed,
+    width: canvasWidth - bleed * 2,
+    height: canvasHeight - bleed * 2,
+  };
 
   return {
     canvas: { width: canvasWidth, height: canvasHeight },
+    trim,
     photo,
     borderOuter,
     borderWidthPx: border,
     captionFontSizePx: Math.round(mmToPx(spec.captionSizeMm, dpi)),
-    captionCenterY: bandTop + Math.round((canvasHeight - bandTop) / 2),
+    captionCenterY: bandTop + Math.round((trim.y + trim.height - bandTop) / 2),
     leftCaptionX: photo.x,
     rightCaptionX: photo.x + photo.width,
   };

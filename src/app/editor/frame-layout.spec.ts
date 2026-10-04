@@ -1,4 +1,5 @@
 import {
+  bleedMm,
   buildFrameLayout,
   captionFontScale,
   clampUnit,
@@ -31,9 +32,25 @@ describe('frame layout', () => {
     expect(layout.borderOuter.width).toBeCloseTo(layout.photo.width + layout.borderWidthPx * 2);
     expect(layout.leftCaptionX).toBe(layout.photo.x);
     expect(layout.rightCaptionX).toBe(layout.photo.x + layout.photo.width);
+    const bleed = Math.round(mmToPx(bleedMm));
+    const keptWhite = Math.round(mmToPx(10 / 3));
+    expect(layout.trim).toEqual({
+      x: bleed,
+      y: bleed,
+      width: layout.canvas.width - bleed * 2,
+      height: layout.canvas.height - bleed * 2,
+    });
+    expect(layout.borderOuter.x - layout.trim.x).toBe(keptWhite);
+    expect(layout.borderOuter.y - layout.trim.y).toBe(keptWhite);
+    expect(
+      layout.trim.x + layout.trim.width - (layout.borderOuter.x + layout.borderOuter.width),
+    ).toBe(keptWhite);
     const bandTop = layout.borderOuter.y + layout.borderOuter.height;
-    expect(layout.captionCenterY).toBe(bandTop + Math.round((layout.canvas.height - bandTop) / 2));
+    const trimBottom = layout.trim.y + layout.trim.height;
+    expect(layout.captionCenterY).toBe(bandTop + Math.round((trimBottom - bandTop) / 2));
+    expect(trimBottom - bandTop).toBe(Math.round(mmToPx(28 / 3)));
     expect(layout.captionCenterY).toBeGreaterThan(layout.photo.y + layout.photo.height);
+    expect(layout.captionCenterY).toBeLessThan(layout.canvas.height - bleed);
   });
 
   it('uses a 10 by 15 card for a portrait photo', () => {

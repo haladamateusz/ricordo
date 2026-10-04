@@ -41,7 +41,14 @@
           aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
           (keydown)="onPreviewKeydown($event)"
         >
-          <canvas #preview aria-hidden="true"></canvas>
+          <canvas
+            #preview
+            aria-hidden="true"
+            [style.left.%]="canvasFrame().left"
+            [style.top.%]="canvasFrame().top"
+            [style.width.%]="canvasFrame().width"
+            [style.height.%]="canvasFrame().height"
+          ></canvas>
           <div
             class="photo-overlay"
             [class.is-dragging]="dragging()"
