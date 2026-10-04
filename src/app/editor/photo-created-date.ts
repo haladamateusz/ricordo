@@ -1,4 +1,6 @@
-import exifr from 'exifr';
+// The full exifr build dynamically imports optional readers, which Vite cannot
+// analyze. The lite build covers JPEG and HEIC dates without that import.
+import exifr from 'exifr/dist/lite.esm.mjs';
 
 const JPEG_TYPES = new Set(['image/jpeg', 'image/jpg']);
 const HEIC_TYPES = new Set([
@@ -30,9 +32,10 @@ export async function readCreatedDate(file: File): Promise<string | null> {
   }
 
   try {
+    // A `pick` list walks every TIFF block. The lite build has no interop
+    // dictionary, so that list throws before any date is read.
     const tags: unknown = await exifr.parse(file, {
       reviveValues: false,
-      pick: ['DateTimeOriginal', 'CreateDate', 'ModifyDate'],
     });
     return createdDateFromTags(tags);
   } catch {
