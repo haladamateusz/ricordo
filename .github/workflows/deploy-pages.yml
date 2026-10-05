@@ -41,14 +41,14 @@ jobs:
 
       - name: Prepare Pages files
         run: |
-          site=dist/photo-cropper/browser
+          site=dist/ricordo/browser
           cp "$site/index.html" "$site/404.html"
           touch "$site/.nojekyll"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          path: dist/photo-cropper/browser
+          path: dist/ricordo/browser
           include-hidden-files: true
 
   deploy:

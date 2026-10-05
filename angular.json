@@ -7,7 +7,7 @@
   },
   "newProjectRoot": "projects",
   "projects": {
-    "photo-cropper": {
+    "ricordo": {
       "projectType": "application",
       "schematics": {},
       "root": "",
@@ -55,10 +55,10 @@
           "builder": "@angular/build:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "photo-cropper:build:production"
+              "buildTarget": "ricordo:build:production"
             },
             "development": {
-              "buildTarget": "photo-cropper:build:development"
+              "buildTarget": "ricordo:build:development"
             }
           },
           "defaultConfiguration": "development"

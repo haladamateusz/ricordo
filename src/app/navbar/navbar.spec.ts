@@ -27,7 +27,7 @@ describe('Navbar', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     const home = compiled.querySelector('a');
 
-    expect(compiled.querySelector('h1')?.textContent).toContain('framer');
+    expect(compiled.querySelector('h1')?.textContent).toContain('ricordo');
     expect(home?.getAttribute('href')).toBe('/');
     expect(home?.getAttribute('aria-current')).toBe('page');
   });

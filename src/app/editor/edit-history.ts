@@ -68,7 +68,7 @@ export interface ResolvedEdits {
   goneIds: string[];
 }
 
-const handleDbName = 'photo-cropper';
+const handleDbName = 'ricordo';
 const handleStoreName = 'file-handles';
 const imageStoreName = 'edit-images';
 const listStoreName = 'edits';

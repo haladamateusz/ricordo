@@ -20,7 +20,7 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.textContent).toContain('framer');
+    expect(compiled.textContent).toContain('ricordo');
     expect(compiled.textContent).toContain('Choose a photo');
     expect(compiled.textContent).toContain('Download');
   });
