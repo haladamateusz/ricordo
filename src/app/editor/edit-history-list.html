@@ -1,0 +1,144 @@
+<div class="sidebar-sheet">
+<div class="sidebar-titlebar">
+  <h2 id="edits-title" class="sidebar-title">Edits</h2>
+  <button #closeButton type="button" class="sidebar-close" aria-label="Close edits" (click)="drawer.close()">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M6 6l12 12M18 6L6 18"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+      />
+    </svg>
+  </button>
+</div>
+<div class="sidebar-head">
+<div class="sidebar-tabs" role="tablist" aria-label="Edits" [attr.data-tab]="tab()">
+  <span class="sidebar-tab-indicator" aria-hidden="true"></span>
+  <button
+    #tabButton
+    type="button"
+    class="sidebar-tab"
+    role="tab"
+    id="history-tab"
+    aria-controls="history-panel"
+    [attr.aria-selected]="tab() === 'history'"
+    [attr.tabindex]="tab() === 'history' ? 0 : -1"
+    (click)="show('history')"
+    (keydown)="onTabKey($event)"
+  >
+    History
+  </button>
+  <button
+    #tabButton
+    type="button"
+    class="sidebar-tab"
+    role="tab"
+    id="current-tab"
+    aria-controls="current-panel"
+    [attr.aria-selected]="tab() === 'current'"
+    [attr.tabindex]="tab() === 'current' ? 0 : -1"
+    (click)="show('current')"
+    (keydown)="onTabKey($event)"
+  >
+    Current edits
+  </button>
+</div>
+</div>
+
+<div class="sidebar-stage">
+  @if (tab() === 'history') {
+    <div
+      id="history-panel"
+      class="sidebar-panel"
+      role="tabpanel"
+      aria-labelledby="history-tab"
+      animate.enter="panel-enter-start"
+      animate.leave="panel-leave-start"
+    >
+    @if (history.loaded() && history.edits().length === 0) {
+      <p class="history-empty">No edits yet</p>
+    } @else if (history.edits().length > 0) {
+      <div #historyScroll class="history-scroll">
+        <div class="history-window" role="list" [style.height.px]="historyVirtualizer.getTotalSize()">
+          @for (row of historyVirtualizer.getVirtualItems(); track row.index) {
+            @let edit = history.edits()[row.index];
+            @if (edit) {
+              <div
+                class="history-row"
+                role="listitem"
+                [style.transform]="'translateY(' + row.start + 'px)'"
+              >
+                <button
+                  type="button"
+                  class="history-open"
+                  [attr.aria-label]="rowLabel(edit)"
+                  (click)="choose(edit)"
+                >
+                  <div class="history-photo">
+                    @if (edit.thumbnailUrl && !failedThumbs().has(edit.id)) {
+                      <img [src]="edit.thumbnailUrl" alt="" (error)="hideThumb(edit.id)" />
+                    }
+                  </div>
+                  <div class="history-copy" aria-hidden="true">
+                    <p class="history-caption">{{ captionPreview(edit.rightCaption) }}</p>
+                    <p class="history-date">{{ formatDate(edit.date) }}</p>
+                  </div>
+                </button>
+              </div>
+            }
+          }
+        </div>
+      </div>
+    }
+  </div>
+  } @else {
+    <div
+      id="current-panel"
+      class="sidebar-panel"
+      role="tabpanel"
+      aria-labelledby="current-tab"
+      animate.enter="panel-enter-end"
+      animate.leave="panel-leave-end"
+    >
+      <ng-content />
+      @if (session.edits().length === 0) {
+        <p class="history-empty">No current edits</p>
+      } @else {
+        <div #currentScroll class="history-scroll">
+          <div class="history-window" role="list" [style.height.px]="currentVirtualizer.getTotalSize()">
+            @for (row of currentVirtualizer.getVirtualItems(); track row.index) {
+              @let edit = session.edits()[row.index];
+              @if (edit) {
+                <div
+                  class="history-row"
+                  role="listitem"
+                  [style.transform]="'translateY(' + row.start + 'px)'"
+                >
+                  <button
+                    type="button"
+                    class="history-open"
+                    [attr.aria-label]="rowLabel(edit)"
+                    [attr.aria-current]="edit.id === session.activeId() ? 'true' : null"
+                    (click)="chooseCurrent(edit)"
+                  >
+                    <div class="history-photo">
+                      @if (edit.thumbnailUrl && !failedThumbs().has(edit.id)) {
+                        <img [src]="edit.thumbnailUrl" alt="" (error)="hideThumb(edit.id)" />
+                      }
+                    </div>
+                    <div class="history-copy" aria-hidden="true">
+                      <p class="history-caption">{{ captionPreview(edit.rightCaption) }}</p>
+                      <p class="history-date">{{ formatDate(edit.date) }}</p>
+                    </div>
+                  </button>
+                </div>
+              }
+            }
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>
+</div>

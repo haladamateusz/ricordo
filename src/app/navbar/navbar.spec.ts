@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
+import { EditDrawer } from '../editor/edit-drawer';
 import { Navbar } from './navbar';
 
 describe('Navbar', () => {
@@ -29,5 +30,19 @@ describe('Navbar', () => {
     expect(compiled.querySelector('h1')?.textContent).toContain('framer');
     expect(home?.getAttribute('href')).toBe('/');
     expect(home?.getAttribute('aria-current')).toBe('page');
+  });
+
+  it('opens the edits dialog from the menu button', () => {
+    const drawer = TestBed.inject(EditDrawer);
+    const menu = fixture.nativeElement.querySelector('.menu') as HTMLButtonElement;
+
+    expect(menu.getAttribute('aria-expanded')).toBe('false');
+    expect(menu.getAttribute('aria-controls')).toBe('edits-dialog');
+
+    menu.click();
+    fixture.detectChanges();
+
+    expect(drawer.open()).toBe(true);
+    expect(menu.getAttribute('aria-expanded')).toBe('true');
   });
 });

@@ -4,6 +4,7 @@
   class="date-picker__trigger"
   aria-haspopup="dialog"
   [id]="controlId()"
+  [disabled]="disabled()"
   [attr.aria-expanded]="isOpen()"
   [attr.aria-controls]="panelId()"
   [class.date-picker__trigger--placeholder]="!value()"

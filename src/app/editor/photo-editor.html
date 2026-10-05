@@ -1,4 +1,53 @@
 <div class="editor">
+  <app-edit-history-list
+    (selected)="openPastEdit($event)"
+    (currentSelected)="openCurrentEdit($event)"
+  >
+    @if (hasCurrentEdits()) {
+      <button
+        type="button"
+        class="picker picker--current"
+        [class.is-dragover]="currentDragOver()"
+        [class.is-loading]="loadingCount() > 0"
+        [attr.aria-busy]="loadingCount() > 0 ? 'true' : null"
+        aria-describedby="current-photo-hint"
+        (click)="openPicker()"
+        (dragover)="onCurrentDragOver($event)"
+        (dragleave)="onCurrentDragLeave($event)"
+        (drop)="onCurrentDrop($event)"
+      >
+        @if (loadingCount() > 0) {
+          <svg class="picker-runner" aria-hidden="true">
+            @for (line of runnerLines; track line.phase) {
+              @for (band of runnerBands; track band.shift) {
+                <rect
+                  [style.--runner-fraction]="band.fraction"
+                  [style.--runner-shift]="band.shift"
+                  [style.--runner-phase]="line.phase"
+                  [style.opacity]="band.opacity"
+                />
+              }
+            }
+          </svg>
+        }
+        <span class="picker-icon">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14.5v3.75A1.75 1.75 0 0 0 6.75 20h10.5A1.75 1.75 0 0 0 19 18.25V14.5"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </span>
+        <strong>{{ loadingCount() > 0 ? loadingLabel() : 'Choose a photo' }}</strong>
+        <span id="current-photo-hint" class="photo-hint"
+          >JPEG, PNG, WebP, or HEIC. You can also drop files here.</span
+        >
+      </button>
+    }
+  </app-edit-history-list>
   <main
     class="workspace"
     (dragover)="onDragOver($event)"
@@ -67,7 +116,7 @@
               <button
                 type="button"
                 class="button button--secondary button--compact"
-                (click)="openPicker()"
+                (click)="replacePhoto()"
               >
                 Replace
               </button>
@@ -95,9 +144,25 @@
           type="button"
           class="picker"
           [class.is-dragover]="dragOver()"
+          [class.is-loading]="loadingCount() > 0"
+          [attr.aria-busy]="loadingCount() > 0 ? 'true' : null"
           aria-describedby="photo-hint"
           (click)="openPicker()"
         >
+          @if (loadingCount() > 0) {
+            <svg class="picker-runner" aria-hidden="true">
+              @for (line of runnerLines; track line.phase) {
+                @for (band of runnerBands; track band.shift) {
+                  <rect
+                    [style.--runner-fraction]="band.fraction"
+                    [style.--runner-shift]="band.shift"
+                    [style.--runner-phase]="line.phase"
+                    [style.opacity]="band.opacity"
+                  />
+                }
+              }
+            </svg>
+          }
           <span class="picker-icon">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path
@@ -109,9 +174,9 @@
               />
             </svg>
           </span>
-          <strong>Choose a photo</strong>
+          <strong>{{ loadingCount() > 0 ? loadingLabel() : 'Choose a photo' }}</strong>
           <span id="photo-hint" class="photo-hint"
-            >JPEG, PNG, WebP, or HEIC. You can also drop a file here.</span
+            >JPEG, PNG, WebP, or HEIC. You can also drop files here.</span
           >
         </button>
       }
@@ -151,6 +216,7 @@
     class="sr-only"
     type="file"
     accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
+    multiple
     (change)="onFileSelected($event)"
   />
 </div>

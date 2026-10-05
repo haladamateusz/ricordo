@@ -8,6 +8,7 @@
   --page: #e7e2e8;
   --text: #241820;
   --surface: #fff;
+  --sidebar: color-mix(in srgb, var(--page) 52%, var(--surface));
   --line: #d8ced4;
   --secondary: #f3eef1;
   --secondary-hover: #e7dee4;

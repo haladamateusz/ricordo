@@ -32,9 +32,14 @@
   white-space: nowrap;
 }
 
-.date-picker__trigger:hover,
+.date-picker__trigger:hover:not(:disabled),
 .date-picker__trigger[aria-expanded='true'] {
   border-color: var(--accent);
+}
+
+.date-picker__trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .date-picker__trigger:focus-visible {

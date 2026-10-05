@@ -11,7 +11,7 @@
 .editor {
   display: flex;
   flex: 1;
-  flex-direction: column;
+  flex-direction: row;
   min-height: 0;
 }
 
@@ -20,6 +20,7 @@
   flex: 1;
   align-items: center;
   justify-content: center;
+  min-width: 0;
   padding: 1.5rem;
 }
 
@@ -50,6 +51,11 @@ input {
 
 input::placeholder {
   color: color-mix(in srgb, var(--text) 55%, transparent);
+}
+
+input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 input:focus-visible,
@@ -190,6 +196,106 @@ input:focus-visible,
   font-size: 0.76rem;
 }
 
+.picker.is-loading {
+  position: relative;
+}
+
+.picker.is-loading .picker-icon,
+.picker.is-loading .photo-hint {
+  visibility: hidden;
+}
+
+.picker-runner {
+  position: absolute;
+  top: -0.5px;
+  left: -0.5px;
+  width: calc(100% + 1px);
+  height: calc(100% + 1px);
+  overflow: visible;
+  --runner-dash: 7rem;
+
+  pointer-events: none;
+}
+
+@media (min-width: 641px) {
+  .picker-runner {
+    --runner-dash: 16rem;
+  }
+}
+
+.picker-runner rect {
+  width: 100%;
+  height: 100%;
+  rx: calc(0.7rem - 0.5px);
+  ry: calc(0.7rem - 0.5px);
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2px;
+  stroke-linecap: round;
+  --runner-band: calc(var(--runner-dash) * var(--runner-fraction, 1));
+  --runner-lead: calc(
+    var(--runner-dash) * var(--runner-shift, 0) * -1 - var(--runner-lap, 207rem) * var(--runner-phase, 0)
+  );
+
+  stroke-dasharray: var(--runner-band) calc(var(--runner-lap, 207rem) - var(--runner-band));
+  animation: picker-run 5.6s cubic-bezier(0.3, 0.25, 0.7, 0.75) infinite;
+}
+
+@keyframes picker-run {
+  0% {
+    stroke-dashoffset: var(--runner-lead, 0);
+    animation-timing-function: cubic-bezier(0.3, 0.25, 0.7, 0.75);
+  }
+
+  20% {
+    stroke-dashoffset: calc(var(--runner-lead, 0) - var(--runner-lap, 207rem) * 0.18);
+    animation-timing-function: cubic-bezier(0.3, 0.25, 0.7, 0.75);
+  }
+
+  40% {
+    stroke-dashoffset: calc(var(--runner-lead, 0) - var(--runner-lap, 207rem) * 0.41);
+    animation-timing-function: cubic-bezier(0.3, 0.25, 0.7, 0.75);
+  }
+
+  60% {
+    stroke-dashoffset: calc(var(--runner-lead, 0) - var(--runner-lap, 207rem) * 0.59);
+    animation-timing-function: cubic-bezier(0.3, 0.25, 0.7, 0.75);
+  }
+
+  80% {
+    stroke-dashoffset: calc(var(--runner-lead, 0) - var(--runner-lap, 207rem) * 0.82);
+    animation-timing-function: cubic-bezier(0.3, 0.25, 0.7, 0.75);
+  }
+
+  100% {
+    stroke-dashoffset: calc(var(--runner-lead, 0) - var(--runner-lap, 207rem));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .picker-runner {
+    display: none;
+  }
+}
+
+.picker--current {
+  aspect-ratio: auto;
+  flex: none;
+  width: auto;
+  margin: 1rem 0.65rem 0.85rem;
+  padding: 0.7rem 0.75rem;
+  gap: 0.2rem;
+}
+
+.picker--current .picker-icon {
+  width: 2rem;
+  height: 2rem;
+}
+
+.picker--current .photo-hint {
+  max-width: 16rem;
+}
+
 .stage {
   position: relative;
   width: 100%;
@@ -268,6 +374,10 @@ input:focus-visible,
 }
 
 @media (max-width: 640px) {
+  .editor {
+    flex-direction: column;
+  }
+
   .fields {
     grid-template-columns: 1fr;
   }

@@ -5,6 +5,7 @@ import {
   ElementRef,
   PLATFORM_ID,
   computed,
+  effect,
   inject,
   input,
   model,
@@ -95,6 +96,7 @@ export class DatePicker implements FormValueControl<string> {
   private pointerInside = false;
 
   readonly value = model.required<string>();
+  readonly disabled = model(false);
   readonly controlId = input.required<string>();
   readonly placeholder = input.required<string>();
   readonly touch = output<void>();
@@ -110,6 +112,12 @@ export class DatePicker implements FormValueControl<string> {
   );
 
   constructor() {
+    effect(() => {
+      if (this.disabled()) {
+        this.isOpen.set(false);
+      }
+    });
+
     if (this.isBrowser) {
       void import('cally').then(() => {
         this.isCalendarReady.set(true);
@@ -218,6 +226,10 @@ export class DatePicker implements FormValueControl<string> {
   }
 
   private open(): void {
+    if (this.disabled()) {
+      return;
+    }
+
     const today = new Date();
     this.maxDate.set(toLocalIsoDate(today));
     this.yearCount.set(selectableYearCount(today.getFullYear()));

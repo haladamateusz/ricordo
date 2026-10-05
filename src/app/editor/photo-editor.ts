@@ -3,16 +3,27 @@ import {
   Component,
   computed,
   DestroyRef,
+  effect,
   ElementRef,
   inject,
   signal,
   viewChild,
 } from '@angular/core';
-import { form, FormField } from '@angular/forms/signals';
+import { disabled, form, FormField } from '@angular/forms/signals';
 
+import { CurrentSession, type CurrentEdit } from './current-session';
 import { DatePicker, formatCaptionDate } from './date-picker';
+import { EditHistory, type StoredEdit, type StoredFileHandle } from './edit-history';
+import { EditHistoryList } from './edit-history-list';
 import { HEIC_DECODER } from './heic-image';
 import { isAcceptedPhoto, isHeic, readCreatedDate } from './photo-created-date';
+import {
+  PHOTO_FILE_PICKER,
+  filesFromDrop,
+  hasFileSystemPicker,
+  pickPhotoFiles,
+} from './photo-file-picker';
+import { originalPng, thumbnailBlob } from './photo-thumbnail';
 
 import {
   buildFrameLayout,
@@ -28,6 +39,7 @@ interface LoadedPhoto {
   image: HTMLImageElement;
   fileName: string;
   objectUrl: string;
+  handle: StoredFileHandle | null;
 }
 
 interface Pan {
@@ -35,34 +47,98 @@ interface Pan {
   y: number;
 }
 
+interface IncomingPhoto {
+  kind: 'photo';
+  image: HTMLImageElement;
+  fileName: string;
+  objectUrl: string;
+  handle: StoredFileHandle | null;
+  date: string;
+}
+
+interface IncomingFailure {
+  kind: 'failure';
+  heic: boolean;
+  date: string | null;
+}
+
+interface RestoredEdit {
+  left: string;
+  right: string;
+  panX: number;
+  panY: number;
+  zoom: number;
+}
+
+interface LoadingRunner {
+  rect: SVGRectElement;
+  dash: number;
+  gap: number;
+  lap: number;
+}
+
 const CENTER_PAN: Pan = { x: 0.5, y: 0.5 };
+const RUNNER_BAND_COUNT = 12;
+const loadingRunnerBands = Array.from({ length: RUNNER_BAND_COUNT }, (_, index) => ({
+  fraction: (RUNNER_BAND_COUNT - index) / RUNNER_BAND_COUNT,
+  shift: index / RUNNER_BAND_COUNT,
+  opacity: 1 / (RUNNER_BAND_COUNT - index),
+}));
+const loadingRunnerLines = [{ phase: 0 }, { phase: 0.5 }];
 const KEY_NUDGE_PX = 20;
 const ZOOM_WHEEL_GAIN = 0.002;
+const currentEditSaveDelay = 1000;
 
 @Component({
   selector: 'app-photo-editor',
-  imports: [FormField, DatePicker],
+  imports: [FormField, DatePicker, EditHistoryList],
   templateUrl: './photo-editor.html',
   styleUrl: './photo-editor.css',
+  providers: [CurrentSession],
 })
 export class PhotoEditor {
   private readonly destroyRef = inject(DestroyRef);
   private readonly decodeHeic = inject(HEIC_DECODER);
+  private readonly pickPhoto = inject(PHOTO_FILE_PICKER);
+  private readonly history = inject(EditHistory);
+  private readonly session = inject(CurrentSession);
+  private committedKey = '';
+  private replaceOnNextLoad = false;
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly canvas = viewChild<ElementRef<HTMLCanvasElement>>('preview');
   private readonly fileInput = viewChild<ElementRef<HTMLInputElement>>('fileInput');
+  private readonly editList = viewChild(EditHistoryList);
   private dragOrigin: { x: number; y: number; pan: Pan } | null = null;
   private loadId = 0;
+  private runnerObserver: ResizeObserver | null = null;
 
   protected readonly photo = signal<LoadedPhoto | null>(null);
   protected readonly pan = signal<Pan>(CENTER_PAN);
   protected readonly zoom = signal(1);
   protected readonly dragging = signal(false);
   protected readonly dragOver = signal(false);
+  protected readonly currentDragOver = signal(false);
   protected readonly errorMessage = signal('');
   protected readonly pendingMessage = signal('');
+  protected readonly loadingCount = signal(0);
+  private batchId = 0;
   protected readonly fontReady = signal(false);
   protected readonly captionModel = signal({ left: '', right: '' });
-  protected readonly captionForm = form(this.captionModel);
+  protected readonly captionForm = form(this.captionModel, (schema) => {
+    const noCurrentEdits = () => this.session.edits().length === 0;
+    disabled(schema.left, noCurrentEdits);
+    disabled(schema.right, noCurrentEdits);
+  });
+
+  protected readonly hasCurrentEdits = computed(() => this.session.edits().length > 0);
+  private readonly loadingDone = signal(0);
+  protected readonly loadingLabel = computed(() => {
+    const total = this.loadingCount();
+    const word = total === 1 ? 'Loading image' : 'Loading images';
+    return `${word} (${this.loadingDone()}/${total})`;
+  });
+  protected readonly runnerBands = loadingRunnerBands;
+  protected readonly runnerLines = loadingRunnerLines;
 
   protected readonly orientation = computed<Orientation>(() => {
     const photo = this.photo();
@@ -118,7 +194,23 @@ export class PhotoEditor {
     }
 
     this.destroyRef.onDestroy(() => {
+      this.runnerObserver?.disconnect();
+      this.session.release();
       this.revokePhoto();
+    });
+
+    effect((onCleanup) => {
+      const photo = this.photo();
+      const id = this.session.activeId();
+      const key = this.draftKey();
+      if (!photo || !id || key === this.committedKey) {
+        return;
+      }
+
+      const timer = setTimeout(() => {
+        this.saveActiveEdit();
+      }, currentEditSaveDelay);
+      onCleanup(() => clearTimeout(timer));
     });
 
     afterRenderEffect({
@@ -155,19 +247,106 @@ export class PhotoEditor {
         );
       },
     });
+
+    afterRenderEffect({
+      earlyRead: () => {
+        this.runnerObserver?.disconnect();
+        this.runnerObserver = null;
+        return this.loadingCount() > 0 ? this.measureLoadingRunners() : [];
+      },
+      write: (measures) => {
+        const runners = measures();
+        this.applyLoadingRunners(runners);
+        if (runners.length === 0 || typeof ResizeObserver === 'undefined') {
+          return;
+        }
+
+        this.runnerObserver = new ResizeObserver(() => {
+          this.applyLoadingRunners(this.measureLoadingRunners());
+        });
+        for (const picker of this.host.nativeElement.querySelectorAll<HTMLElement>(
+          '.picker.is-loading',
+        )) {
+          this.runnerObserver.observe(picker);
+        }
+      },
+    });
+  }
+
+  private measureLoadingRunners(): LoadingRunner[] {
+    const dashCap = (this.longRunner() ? 16 : 7) * this.rootFontSize();
+    const runners: LoadingRunner[] = [];
+    for (const rect of this.host.nativeElement.querySelectorAll<SVGRectElement>(
+      '.picker-runner rect',
+    )) {
+      const box = this.runnerBox(rect);
+      if (box.width < 1 || box.height < 1) {
+        continue;
+      }
+
+      const radius = Math.min(this.runnerRadius(), box.width / 2, box.height / 2);
+      const lap = 2 * (box.width + box.height) + 2 * radius * (Math.PI - 4);
+      const dash = Math.min(dashCap, lap * 0.34);
+      runners.push({ rect, dash, gap: lap - dash, lap });
+    }
+    return runners;
+  }
+
+  private applyLoadingRunners(runners: readonly LoadingRunner[]): void {
+    for (const { rect, dash, gap, lap } of runners) {
+      rect.style.setProperty('--runner-dash', `${dash}px`);
+      rect.style.setProperty('--runner-gap', `${gap}px`);
+      rect.style.setProperty('--runner-lap', `${lap}px`);
+    }
+  }
+
+  private runnerBox(rect: SVGRectElement): DOMRect {
+    try {
+      const box = rect.getBBox();
+      if (box.width > 0 && box.height > 0) {
+        return box;
+      }
+    } catch {
+      // jsdom does not implement SVG geometry.
+    }
+    return rect.getBoundingClientRect();
+  }
+
+  private runnerRadius(): number {
+    return Math.max(0.7 * this.rootFontSize() - 0.5, 0);
+  }
+
+  private rootFontSize(): number {
+    const size = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+    return Number.isFinite(size) ? size : 16;
+  }
+
+  private longRunner(): boolean {
+    return window.matchMedia('(min-width: 641px)').matches;
   }
 
   protected openPicker(): void {
-    this.fileInput()?.nativeElement.click();
+    this.launchPicker(false);
+  }
+
+  protected replacePhoto(): void {
+    this.launchPicker(true);
   }
 
   protected onFileSelected(event: Event): void {
+    const replace = this.replaceOnNextLoad;
+    this.replaceOnNextLoad = false;
     const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
+    const files = Array.from(input.files ?? []);
     input.value = '';
-    if (file) {
-      void this.loadFile(file);
+    if (replace) {
+      const file = files[0];
+      if (file) {
+        void this.loadFile(file, null, null, true);
+      }
+      return;
     }
+    void this.loadIncoming(files.map((file) => ({ file, handle: null })));
   }
 
   protected onDragOver(event: DragEvent): void {
@@ -186,10 +365,26 @@ export class PhotoEditor {
   protected onDrop(event: DragEvent): void {
     event.preventDefault();
     this.dragOver.set(false);
-    const file = event.dataTransfer?.files[0];
-    if (file) {
-      void this.loadFile(file);
+    void this.loadDrop(event.dataTransfer);
+  }
+
+  protected onCurrentDragOver(event: DragEvent): void {
+    event.preventDefault();
+    this.currentDragOver.set(true);
+  }
+
+  protected onCurrentDragLeave(event: DragEvent): void {
+    const next = event.relatedTarget;
+    if (next instanceof Node && (event.currentTarget as Node).contains(next)) {
+      return;
     }
+    this.currentDragOver.set(false);
+  }
+
+  protected onCurrentDrop(event: DragEvent): void {
+    event.preventDefault();
+    this.currentDragOver.set(false);
+    void this.loadDrop(event.dataTransfer);
   }
 
   protected onPointerDown(event: PointerEvent): void {
@@ -309,12 +504,21 @@ export class PhotoEditor {
   }
 
   protected removePhoto(): void {
-    this.revokePhoto();
-    this.photo.set(null);
-    this.pan.set(CENTER_PAN);
-    this.zoom.set(1);
     this.dragging.set(false);
     this.dragOrigin = null;
+    const next = this.session.discard(this.session.activeId() ?? '');
+    if (!next) {
+      this.photo.set(null);
+      this.pan.set(CENTER_PAN);
+      this.zoom.set(1);
+      this.captionModel.set({ left: '', right: '' });
+      this.committedKey = this.draftKey();
+      this.errorMessage.set('');
+      this.pendingMessage.set('');
+      return;
+    }
+
+    this.openCurrentEdit(next);
   }
 
   protected download(): void {
@@ -334,20 +538,266 @@ export class PhotoEditor {
       return;
     }
 
+    const saveHistory = () => {
+      const rightCaption = this.captionModel().right;
+      const date = this.captionModel().left;
+      const pan = this.pan();
+      const zoom = this.zoom();
+      const frame = this.layout().photo;
+      void Promise.all([
+        originalPng(photo.image),
+        thumbnailBlob(photo.image, frame.width, frame.height, pan.x, pan.y, zoom),
+      ]).then(([image, thumbnail]) =>
+        this.history.record({
+          fileName: photo.fileName,
+          rightCaption,
+          date,
+          thumbnail,
+          image,
+          handle: photo.handle,
+          panX: pan.x,
+          panY: pan.y,
+          zoom,
+        }),
+      );
+    };
+
     const file = new File([blob], fileName, { type: 'image/png' });
     if (canSaveToGallery(file)) {
-      void navigator.share({ files: [file] }).catch((error: unknown) => {
-        if (!isShareAbort(error)) {
-          downloadFile(blob, fileName);
-        }
-      });
+      void navigator.share({ files: [file] }).then(
+        () => {
+          saveHistory();
+        },
+        (error: unknown) => {
+          if (!isShareAbort(error)) {
+            downloadFile(blob, fileName);
+            saveHistory();
+          }
+        },
+      );
       return;
     }
 
     downloadFile(blob, fileName);
+    saveHistory();
   }
 
-  private async loadFile(file: File): Promise<void> {
+  protected openPastEdit(edit: StoredEdit): void {
+    void this.restoreEdit(edit);
+  }
+
+  protected openCurrentEdit(edit: CurrentEdit): void {
+    this.errorMessage.set('');
+    this.pendingMessage.set('');
+    this.session.activate(edit.id);
+    this.photo.set({
+      image: edit.image,
+      fileName: edit.fileName,
+      objectUrl: edit.objectUrl,
+      handle: edit.handle,
+    });
+    this.pan.set({ x: edit.panX, y: edit.panY });
+    this.zoom.set(edit.zoom);
+    this.captionModel.set({ left: edit.date, right: edit.rightCaption });
+    this.committedKey = this.draftKey();
+  }
+
+  private async restoreEdit(edit: StoredEdit): Promise<void> {
+    let image: Blob | undefined;
+    try {
+      image = await this.history.image(edit.id);
+    } catch {
+      image = undefined;
+    }
+
+    if (!image) {
+      this.errorMessage.set('That saved photo could not be opened.');
+      return;
+    }
+
+    const file = new File([image], edit.fileName, { type: 'image/png' });
+    await this.loadFile(file, null, {
+      left: edit.date,
+      right: edit.rightCaption,
+      panX: edit.panX,
+      panY: edit.panY,
+      zoom: edit.zoom,
+    });
+  }
+
+  private launchPicker(replace: boolean): void {
+    this.replaceOnNextLoad = replace;
+    const input = this.fileInput()?.nativeElement;
+    if (input) {
+      input.multiple = !replace;
+    }
+    if (this.pickPhoto === pickPhotoFiles && !hasFileSystemPicker()) {
+      input?.click();
+      return;
+    }
+    void this.pickFromDisk();
+  }
+
+  private async pickFromDisk(): Promise<void> {
+    const replace = this.replaceOnNextLoad;
+    const picked = await this.pickPhoto(!replace);
+    if (picked === 'fallback') {
+      this.fileInput()?.nativeElement.click();
+      return;
+    }
+    this.replaceOnNextLoad = false;
+    if (!picked || picked.length === 0) {
+      return;
+    }
+    if (replace) {
+      const [first] = picked;
+      if (first) {
+        await this.loadFile(first.file, first.handle, null, true);
+      }
+      return;
+    }
+    await this.loadIncoming(picked);
+  }
+
+  private async loadDrop(dataTransfer: DataTransfer | null): Promise<void> {
+    const picked = await filesFromDrop(dataTransfer);
+    await this.loadIncoming(
+      picked.map((item) => (item instanceof File ? { file: item, handle: null } : item)),
+    );
+  }
+
+  private async loadIncoming(
+    picked: readonly { file: File; handle: StoredFileHandle | null }[],
+  ): Promise<void> {
+    const accepted = picked.filter((item) => isAcceptedPhoto(item.file));
+    if (picked.length > 0 && accepted.length === 0) {
+      this.pendingMessage.set('');
+      this.errorMessage.set('Please choose a JPEG, PNG, WebP, or HEIC image.');
+      return;
+    }
+
+    const batchId = ++this.batchId;
+    this.loadingDone.set(0);
+    this.loadingCount.set(accepted.length);
+    this.pendingMessage.set('');
+    this.errorMessage.set('');
+    const drafts: IncomingPhoto[] = [];
+    let failedHeicDate: string | null | undefined;
+
+    for (const item of accepted) {
+      const result = await this.readIncoming(item.file, item.handle, batchId);
+      if (batchId !== this.batchId) {
+        this.revokeIncoming(drafts);
+        if (result?.kind === 'photo') {
+          URL.revokeObjectURL(result.objectUrl);
+        }
+        return;
+      }
+      this.loadingDone.update((count) => count + 1);
+      if (!result) {
+        continue;
+      }
+      if (result.kind === 'photo') {
+        drafts.push(result);
+        continue;
+      }
+      if (result.heic) {
+        failedHeicDate = result.date;
+      }
+      this.errorMessage.set(incomingError(result, false));
+    }
+
+    if (batchId !== this.batchId) {
+      this.revokeIncoming(drafts);
+      return;
+    }
+
+    this.loadingCount.set(0);
+    if (drafts.length === 0) {
+      if (failedHeicDate !== undefined && this.photo() === null) {
+        this.captionModel.update((current) => ({ ...current, right: '' }));
+        this.useCreatedDate(failedHeicDate, this.loadId);
+        this.errorMessage.set(
+          incomingError({ kind: 'failure', heic: true, date: failedHeicDate }, true),
+        );
+      }
+      return;
+    }
+
+    for (const draft of drafts) {
+      this.applyIncoming(draft);
+    }
+    this.editList()?.showCurrent();
+  }
+
+  private async readIncoming(
+    file: File,
+    handle: StoredFileHandle | null,
+    batchId: number,
+  ): Promise<IncomingPhoto | IncomingFailure | null> {
+    const createdDate = readCreatedDate(file);
+    try {
+      const display = await this.openDisplayImage(file, () => undefined);
+      if (batchId !== this.batchId) {
+        URL.revokeObjectURL(display.objectUrl);
+        return null;
+      }
+      const date = (await createdDate) ?? '';
+      if (batchId !== this.batchId) {
+        URL.revokeObjectURL(display.objectUrl);
+        return null;
+      }
+      return {
+        kind: 'photo',
+        image: display.image,
+        fileName: file.name,
+        objectUrl: display.objectUrl,
+        handle,
+        date,
+      };
+    } catch {
+      if (batchId !== this.batchId) {
+        return null;
+      }
+      if (!isHeic(file)) {
+        return { kind: 'failure', heic: false, date: null };
+      }
+      const date = await createdDate;
+      if (batchId !== this.batchId) {
+        return null;
+      }
+      return { kind: 'failure', heic: true, date };
+    }
+  }
+
+  private applyIncoming(draft: IncomingPhoto): void {
+    this.revokePhoto();
+    this.photo.set({
+      image: draft.image,
+      fileName: draft.fileName,
+      objectUrl: draft.objectUrl,
+      handle: draft.handle,
+    });
+    this.pan.set(CENTER_PAN);
+    this.zoom.set(1);
+    this.captionModel.set({ left: draft.date, right: '' });
+    this.startCurrentEdit();
+  }
+
+  private revokeIncoming(drafts: readonly IncomingPhoto[]): void {
+    for (const draft of drafts) {
+      if (!this.session.holds(draft.objectUrl)) {
+        URL.revokeObjectURL(draft.objectUrl);
+      }
+    }
+  }
+
+  private async loadFile(
+    file: File,
+    handle: StoredFileHandle | null = null,
+    restored: RestoredEdit | null = null,
+    replace = false,
+  ): Promise<void> {
     if (!isAcceptedPhoto(file)) {
       this.pendingMessage.set('');
       this.errorMessage.set('Please choose a JPEG, PNG, WebP, or HEIC image.');
@@ -355,32 +805,54 @@ export class PhotoEditor {
     }
 
     const loadId = ++this.loadId;
+    this.batchId += 1;
+    this.loadingDone.set(0);
+    this.loadingCount.set(restored ? 0 : 1);
     this.pendingMessage.set('');
     this.errorMessage.set('');
     const createdDate = readCreatedDate(file);
     try {
       const display = await this.openDisplayImage(file, () => {
         if (loadId === this.loadId) {
-          this.pendingMessage.set('Opening HEIC photo…');
+          this.loadingCount.set(1);
         }
       });
+      const date = restored ? null : await createdDate;
       if (loadId !== this.loadId) {
         URL.revokeObjectURL(display.objectUrl);
         return;
       }
 
       this.revokePhoto();
-      this.photo.set({ image: display.image, fileName: file.name, objectUrl: display.objectUrl });
-      this.pan.set(CENTER_PAN);
-      this.zoom.set(1);
+      this.photo.set({
+        image: display.image,
+        fileName: file.name,
+        objectUrl: display.objectUrl,
+        handle,
+      });
       this.pendingMessage.set('');
       this.errorMessage.set('');
-      this.useCreatedDate(await createdDate, loadId);
+      this.loadingCount.set(0);
+      if (restored && loadId === this.loadId) {
+        this.pan.set({ x: restored.panX, y: restored.panY });
+        this.zoom.set(restored.zoom);
+        this.captionModel.set({ left: restored.left, right: restored.right });
+        this.startCurrentEdit();
+        return;
+      }
+      this.pan.set(CENTER_PAN);
+      this.zoom.set(1);
+      this.captionModel.set({ left: date ?? '', right: '' });
+      if (!(replace && this.replaceCurrentEdit())) {
+        this.startCurrentEdit();
+      }
+      this.editList()?.showCurrent();
     } catch {
       if (loadId !== this.loadId) {
         return;
       }
 
+      this.loadingCount.set(0);
       this.pendingMessage.set('');
       if (isHeic(file)) {
         const date = await createdDate;
@@ -389,6 +861,7 @@ export class PhotoEditor {
         }
 
         if (this.photo() === null) {
+          this.captionModel.update((current) => ({ ...current, right: '' }));
           this.useCreatedDate(date, loadId);
         }
         this.errorMessage.set(
@@ -405,12 +878,128 @@ export class PhotoEditor {
     }
   }
 
-  private useCreatedDate(isoDate: string | null, loadId: number): void {
-    if (!isoDate || loadId !== this.loadId) {
+  private startCurrentEdit(): void {
+    const photo = this.photo();
+    if (!photo) {
       return;
     }
 
-    this.captionModel.update((current) => ({ ...current, left: isoDate }));
+    const captions = this.captionModel();
+    const pan = this.pan();
+    const zoom = this.zoom();
+    const id = this.session.begin({
+      fileName: photo.fileName,
+      rightCaption: captions.right,
+      date: captions.left,
+      panX: pan.x,
+      panY: pan.y,
+      zoom,
+      image: photo.image,
+      objectUrl: photo.objectUrl,
+      handle: photo.handle,
+    });
+    this.committedKey = this.draftKey();
+    void this.refreshThumbnail(id, pan.x, pan.y, zoom);
+  }
+
+  private replaceCurrentEdit(): boolean {
+    const id = this.session.activeId();
+    const photo = this.photo();
+    if (!id || !photo) {
+      return false;
+    }
+
+    const captions = this.captionModel();
+    const pan = this.pan();
+    const zoom = this.zoom();
+    const replaced = this.session.replacePhoto(id, {
+      fileName: photo.fileName,
+      rightCaption: captions.right,
+      date: captions.left,
+      panX: pan.x,
+      panY: pan.y,
+      zoom,
+      image: photo.image,
+      objectUrl: photo.objectUrl,
+      handle: photo.handle,
+    });
+    if (!replaced) {
+      return false;
+    }
+
+    this.committedKey = this.draftKey();
+    void this.refreshThumbnail(id, pan.x, pan.y, zoom);
+    return true;
+  }
+
+  private saveActiveEdit(): void {
+    const id = this.session.activeId();
+    const photo = this.photo();
+    if (!id || !photo) {
+      return;
+    }
+
+    const captions = this.captionModel();
+    const pan = this.pan();
+    const zoom = this.zoom();
+    this.session.write(id, {
+      rightCaption: captions.right,
+      date: captions.left,
+      panX: pan.x,
+      panY: pan.y,
+      zoom,
+    });
+    this.committedKey = this.draftKey();
+    void this.refreshThumbnail(id, pan.x, pan.y, zoom);
+  }
+
+  private async refreshThumbnail(
+    id: string,
+    panX: number,
+    panY: number,
+    zoom: number,
+  ): Promise<void> {
+    const edit = this.session.find(id);
+    if (!edit) {
+      return;
+    }
+
+    const frame = buildFrameLayout(
+      orientationOf(edit.image.naturalWidth, edit.image.naturalHeight),
+    ).photo;
+    const blob = await thumbnailBlob(edit.image, frame.width, frame.height, panX, panY, zoom);
+    const latest = this.session.find(id);
+    if (!blob || !latest || latest.panX !== panX || latest.panY !== panY || latest.zoom !== zoom) {
+      return;
+    }
+
+    this.session.setThumbnail(id, URL.createObjectURL(blob));
+  }
+
+  private draftKey(): string {
+    const captions = this.captionModel();
+    const pan = this.pan();
+    return [
+      this.session.activeId() ?? '',
+      captions.left,
+      captions.right,
+      String(pan.x),
+      String(pan.y),
+      String(this.zoom()),
+    ].join('\u0000');
+  }
+
+  private useCreatedDate(isoDate: string | null, loadId: number): void {
+    if (loadId !== this.loadId) {
+      return;
+    }
+
+    const date = isoDate ?? '';
+    if (this.captionModel().left === date) {
+      return;
+    }
+
+    this.captionModel.update((current) => ({ ...current, left: date }));
   }
 
   private async openDisplayImage(
@@ -440,10 +1029,20 @@ export class PhotoEditor {
 
   private revokePhoto(): void {
     const photo = this.photo();
-    if (photo) {
+    if (photo && !this.session.holds(photo.objectUrl)) {
       URL.revokeObjectURL(photo.objectUrl);
     }
   }
+}
+
+function incomingError(failure: IncomingFailure, noPhoto: boolean): string {
+  if (!failure.heic) {
+    return 'That file could not be opened. Please choose a JPEG, PNG, WebP, or HEIC image.';
+  }
+  if (noPhoto && failure.date) {
+    return 'This browser cannot display HEIC photos. The created date was filled in from the file.';
+  }
+  return 'This browser cannot display HEIC photos.';
 }
 
 function wheelDistance(event: WheelEvent): number {
@@ -465,7 +1064,9 @@ function canSaveToGallery(file: File): boolean {
 }
 
 function isShareAbort(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError';
+  return (
+    typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError'
+  );
 }
 
 function blobFromDataUrl(dataUrl: string): Blob {
