@@ -70,6 +70,19 @@ describe('CurrentSession', () => {
     expect(session.find(first)?.fileName).toBe('harbor.png');
   });
 
+  it('moves one edit to a new place and leaves the open edit active', () => {
+    const first = session.begin(draft('harbor.png', 'Pier'));
+    const second = session.begin(draft('cafe.png', 'Cafe'));
+    const third = session.begin(draft('night.png', 'Night'));
+
+    expect(session.move(third, 2)).toBe(true);
+
+    expect(session.edits().map((edit) => edit.id)).toEqual([second, first, third]);
+    expect(session.activeId()).toBe(third);
+    expect(session.move(third, 2)).toBe(false);
+    expect(session.move('missing', 0)).toBe(false);
+  });
+
   it('drops an edit and activates the one before it', () => {
     const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     const first = session.begin(draft('harbor.png', 'Pier'));

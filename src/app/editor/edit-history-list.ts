@@ -1,6 +1,7 @@
 import {
   afterRenderEffect,
   Component,
+  DestroyRef,
   ElementRef,
   inject,
   output,
@@ -31,6 +32,9 @@ export const historyRowHeight = 88;
     '[class.is-open]': 'drawer.open()',
     '(click)': 'onBackdrop($event)',
     '(document:keydown)': 'onDialogKey($event)',
+    '(document:pointermove)': 'onReorderPointerMove($event)',
+    '(document:pointerup)': 'onReorderPointerUp($event)',
+    '(document:pointercancel)': 'onReorderPointerUp($event)',
   },
 })
 export class EditHistoryList {
@@ -42,6 +46,7 @@ export class EditHistoryList {
 
   readonly selected = output<StoredEdit>();
   readonly currentSelected = output<CurrentEdit>();
+  readonly reordered = output<void>();
 
   protected readonly tab = signal<'history' | 'current'>('history');
   protected readonly switching = signal(false);
@@ -50,8 +55,20 @@ export class EditHistoryList {
   protected readonly session = inject(CurrentSession);
   protected readonly formatDate = formatCaptionDate;
   protected readonly failedThumbs = signal<ReadonlySet<string>>(new Set());
+  protected readonly draggingId = signal<string | null>(null);
+  protected readonly reorderStatus = signal('');
+  private readonly dragTop = signal<number | null>(null);
+  private reorder: ReorderDrag | null = null;
+  private clickStop: ((event: Event) => void) | null = null;
+  private clickTimer = 0;
+  private scrollFrame = 0;
+  private pointerY = 0;
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => {
+      cancelAnimationFrame(this.scrollFrame);
+      this.clearSwallowedClick();
+    });
     afterRenderEffect(() => {
       const id = this.session.activeId();
       if (this.tab() !== 'current' || !id) {
@@ -144,6 +161,172 @@ export class EditHistoryList {
     this.drawer.close();
   }
 
+  protected currentKey(index: number): string {
+    return this.session.edits()[index]?.id ?? String(index);
+  }
+
+  protected currentTransform(start: number, id: string): string {
+    if (this.draggingId() === id) {
+      const top = this.dragTop();
+      if (top !== null) {
+        return `translateY(${top}px)`;
+      }
+    }
+    return `translateY(${start}px)`;
+  }
+
+  protected onReorderPointerDown(event: PointerEvent, edit: CurrentEdit): void {
+    if (event.button !== 0 || this.reorder || this.session.edits().length < 2) {
+      return;
+    }
+    const row = event.currentTarget;
+    if (!(row instanceof HTMLElement)) {
+      return;
+    }
+
+    this.reorder = {
+      id: edit.id,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      grabOffset: event.clientY - row.getBoundingClientRect().top,
+      moved: false,
+      changed: false,
+    };
+  }
+
+  protected onReorderPointerMove(event: PointerEvent): void {
+    const drag = this.reorder;
+    if (!drag || event.pointerId !== drag.pointerId) {
+      return;
+    }
+    if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 6) {
+      return;
+    }
+
+    drag.moved = true;
+    if (event.cancelable) {
+      event.preventDefault();
+    }
+    this.draggingId.set(drag.id);
+    this.pointerY = event.clientY;
+    this.placeDragged(event.clientY);
+    this.queueEdgeScroll();
+  }
+
+  protected onReorderPointerUp(event: PointerEvent): void {
+    const drag = this.reorder;
+    if (!drag || event.pointerId !== drag.pointerId) {
+      return;
+    }
+    if (drag.moved) {
+      this.swallowFollowingClick();
+      if (drag.changed) {
+        this.announceMove(drag.id);
+        this.reordered.emit();
+      }
+    }
+    this.finishReorder();
+  }
+
+  protected onReorderKey(event: KeyboardEvent, edit: CurrentEdit): void {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') {
+      return;
+    }
+    event.preventDefault();
+    const index = this.session.edits().findIndex((item) => item.id === edit.id);
+    const target = event.key === 'ArrowUp' ? index - 1 : index + 1;
+    if (!this.session.move(edit.id, target)) {
+      return;
+    }
+    this.announceMove(edit.id);
+    this.reordered.emit();
+  }
+
+  private placeDragged(clientY: number): void {
+    const drag = this.reorder;
+    const scroll = this.currentScroll()?.nativeElement;
+    if (!drag || !scroll) {
+      return;
+    }
+
+    const contentY = clientY - scroll.getBoundingClientRect().top + scroll.scrollTop;
+    const top = contentY - drag.grabOffset;
+    this.dragTop.set(top);
+    const count = this.session.edits().length;
+    const target = Math.min(count - 1, Math.max(0, Math.floor((top + historyRowHeight / 2) / historyRowHeight)));
+    if (this.session.move(drag.id, target)) {
+      drag.changed = true;
+    }
+  }
+
+  private queueEdgeScroll(): void {
+    if (this.scrollFrame) {
+      return;
+    }
+    const tick = (): void => {
+      this.scrollFrame = 0;
+      const drag = this.reorder;
+      const scroll = this.currentScroll()?.nativeElement;
+      if (!drag?.moved || !scroll) {
+        return;
+      }
+      const rect = scroll.getBoundingClientRect();
+      const edge = 28;
+      if (rect.height < edge * 2) {
+        return;
+      }
+      const delta = this.pointerY < rect.top + edge ? -12 : this.pointerY > rect.bottom - edge ? 12 : 0;
+      if (delta === 0 || scroll.scrollHeight <= scroll.clientHeight) {
+        return;
+      }
+      scroll.scrollTop += delta;
+      this.placeDragged(this.pointerY);
+      this.scrollFrame = requestAnimationFrame(tick);
+    };
+    this.scrollFrame = requestAnimationFrame(tick);
+  }
+
+  private announceMove(id: string): void {
+    const edits = this.session.edits();
+    const index = edits.findIndex((edit) => edit.id === id);
+    const edit = edits[index];
+    if (!edit) {
+      return;
+    }
+    this.reorderStatus.set(`${this.rowLabel(edit)} moved to position ${index + 1} of ${edits.length}.`);
+  }
+
+  private swallowFollowingClick(): void {
+    this.clearSwallowedClick();
+    const stopClick = (event: Event): void => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.clearSwallowedClick();
+    };
+    this.clickStop = stopClick;
+    this.host.nativeElement.addEventListener('click', stopClick, true);
+    this.clickTimer = window.setTimeout(() => this.clearSwallowedClick(), 0);
+  }
+
+  private clearSwallowedClick(): void {
+    window.clearTimeout(this.clickTimer);
+    this.clickTimer = 0;
+    if (!this.clickStop) {
+      return;
+    }
+    this.host.nativeElement.removeEventListener('click', this.clickStop, true);
+    this.clickStop = null;
+  }
+
+  private finishReorder(): void {
+    cancelAnimationFrame(this.scrollFrame);
+    this.scrollFrame = 0;
+    this.reorder = null;
+    this.draggingId.set(null);
+    this.dragTop.set(null);
+  }
+
   protected onBackdrop(event: Event): void {
     if (event.target === event.currentTarget) {
       this.drawer.close();
@@ -156,6 +339,10 @@ export class EditHistoryList {
     }
     if (event.key === 'Escape') {
       event.preventDefault();
+      if (this.reorder?.changed) {
+        this.reordered.emit();
+      }
+      this.finishReorder();
       this.drawer.close();
       return;
     }
@@ -191,4 +378,14 @@ export class EditHistoryList {
       return next;
     });
   }
+}
+
+interface ReorderDrag {
+  id: string;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  grabOffset: number;
+  moved: boolean;
+  changed: boolean;
 }

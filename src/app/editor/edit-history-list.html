@@ -105,16 +105,36 @@
       @if (session.edits().length === 0) {
         <p class="history-empty">No current edits</p>
       } @else {
-        <div #currentScroll class="history-scroll">
+        <div #currentScroll class="history-scroll" [class.is-reordering]="draggingId()">
+          <p class="reorder-status" aria-live="polite">{{ reorderStatus() }}</p>
           <div class="history-window" role="list" [style.height.px]="currentVirtualizer.getTotalSize()">
-            @for (row of currentVirtualizer.getVirtualItems(); track row.index) {
+            @for (row of currentVirtualizer.getVirtualItems(); track currentKey(row.index)) {
               @let edit = session.edits()[row.index];
               @if (edit) {
                 <div
-                  class="history-row"
+                  class="history-row is-sortable"
                   role="listitem"
-                  [style.transform]="'translateY(' + row.start + 'px)'"
+                  [class.is-active]="edit.id === session.activeId()"
+                  [class.is-lifted]="draggingId() === edit.id"
+                  [style.transform]="currentTransform(row.start, edit.id)"
+                  (pointerdown)="onReorderPointerDown($event, edit)"
                 >
+                  <button
+                    type="button"
+                    class="history-grip"
+                    [attr.aria-label]="'Reorder ' + rowLabel(edit)"
+                    [attr.aria-keyshortcuts]="'ArrowUp ArrowDown'"
+                    (keydown)="onReorderKey($event, edit)"
+                  >
+                    <svg viewBox="0 0 16 16" aria-hidden="true">
+                      <circle cx="6" cy="3.5" r="1.15" fill="currentColor" />
+                      <circle cx="10" cy="3.5" r="1.15" fill="currentColor" />
+                      <circle cx="6" cy="8" r="1.15" fill="currentColor" />
+                      <circle cx="10" cy="8" r="1.15" fill="currentColor" />
+                      <circle cx="6" cy="12.5" r="1.15" fill="currentColor" />
+                      <circle cx="10" cy="12.5" r="1.15" fill="currentColor" />
+                    </svg>
+                  </button>
                   <button
                     type="button"
                     class="history-open"
@@ -124,7 +144,7 @@
                   >
                     <div class="history-photo">
                       @if (edit.thumbnailUrl && !failedThumbs().has(edit.id)) {
-                        <img [src]="edit.thumbnailUrl" alt="" (error)="hideThumb(edit.id)" />
+                        <img [src]="edit.thumbnailUrl" alt="" draggable="false" (error)="hideThumb(edit.id)" />
                       }
                     </div>
                     <div class="history-copy" aria-hidden="true">

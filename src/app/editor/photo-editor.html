@@ -57,6 +57,7 @@
   <app-edit-history-list
     (selected)="openPastEdit($event)"
     (currentSelected)="openCurrentEdit($event)"
+    (reordered)="saveCurrentOrder()"
   >
     @if (hasCurrentEdits()) {
       <button

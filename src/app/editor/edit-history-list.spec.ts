@@ -160,6 +160,115 @@ describe('EditHistoryList', () => {
     expect(fixture.nativeElement.getAttribute('role')).toBe('region');
   });
 
+  it('drags one current edit to a new place without opening it', async () => {
+    const fixture = await create();
+    const session = fixture.debugElement.injector.get(CurrentSession);
+    const drawer = fixture.debugElement.injector.get(EditDrawer);
+    session.begin(currentDraft('pier.png', 'Pier'));
+    session.begin(currentDraft('cafe.png', 'Cafe'));
+    session.begin(currentDraft('night.png', 'Night'));
+    drawer.show();
+    fixture.detectChanges();
+    tab(fixture, 'Current edits').click();
+
+    await vi.waitFor(() => {
+      expect(fixture.nativeElement.querySelectorAll('.history-row.is-sortable').length).toBe(3);
+    });
+    const scroll = fixture.nativeElement.querySelector('.history-row.is-sortable')?.closest('.history-scroll');
+    if (!(scroll instanceof HTMLElement)) {
+      throw new Error('Missing current edits list');
+    }
+    scroll.getBoundingClientRect = () => new DOMRect(0, 0, 320, 480);
+    const rows = [...fixture.nativeElement.querySelectorAll('#current-panel .history-row')] as HTMLElement[];
+    rows.forEach((row, index) => {
+      row.getBoundingClientRect = () => new DOMRect(0, index * 88, 320, 88);
+    });
+
+    rows[0].dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 40, clientY: 30, pointerId: 1 }),
+    );
+    scroll.dispatchEvent(
+      new PointerEvent('pointermove', { bubbles: true, clientX: 40, clientY: 130, pointerId: 1 }),
+    );
+    scroll.dispatchEvent(
+      new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 130, pointerId: 1 }),
+    );
+    (rows[0].querySelector('.history-open') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(session.edits().map((edit) => edit.fileName)).toEqual(['cafe.png', 'night.png', 'pier.png']);
+    expect(session.activeId()).toBe(session.edits()[1]?.id);
+    expect(drawer.open()).toBe(true);
+  });
+
+  it('selects a dragged edit on the click after the drag', async () => {
+    const fixture = await create();
+    const session = fixture.debugElement.injector.get(CurrentSession);
+    const drawer = fixture.debugElement.injector.get(EditDrawer);
+    session.begin(currentDraft('pier.png', 'Pier'));
+    session.begin(currentDraft('cafe.png', 'Cafe'));
+    const night = session.begin(currentDraft('night.png', 'Night'));
+    const selected: string[] = [];
+    fixture.componentInstance.currentSelected.subscribe((edit) => selected.push(edit.fileName));
+    drawer.show();
+    fixture.detectChanges();
+    tab(fixture, 'Current edits').click();
+
+    await vi.waitFor(() => {
+      expect(fixture.nativeElement.querySelectorAll('.history-row.is-sortable').length).toBe(3);
+    });
+    const scroll = fixture.nativeElement.querySelector('.history-row.is-sortable')?.closest('.history-scroll');
+    if (!(scroll instanceof HTMLElement)) {
+      throw new Error('Missing current edits list');
+    }
+    scroll.getBoundingClientRect = () => new DOMRect(0, 0, 320, 480);
+    const rows = [...fixture.nativeElement.querySelectorAll('.history-row.is-sortable')] as HTMLElement[];
+    rows.forEach((row, index) => {
+      row.getBoundingClientRect = () => new DOMRect(0, index * 88, 320, 88);
+    });
+
+    rows[1].dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 16, clientY: 118, pointerId: 1 }),
+    );
+    scroll.dispatchEvent(
+      new PointerEvent('pointermove', { bubbles: true, clientX: 16, clientY: 150, pointerId: 1 }),
+    );
+    scroll.dispatchEvent(
+      new PointerEvent('pointerup', { bubbles: true, clientX: 16, clientY: 150, pointerId: 1 }),
+    );
+    (rows[1].querySelector('.history-grip') as HTMLButtonElement).click();
+    expect(session.activeId()).toBe(night);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    (fixture.nativeElement.querySelectorAll('.history-open')[1] as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(selected).toEqual(['cafe.png']);
+    expect(session.activeId()).toBe(night);
+    expect(drawer.open()).toBe(false);
+  });
+
+  it('moves one current edit at a time from the keyboard', async () => {
+    const fixture = await create();
+    const session = fixture.debugElement.injector.get(CurrentSession);
+    session.begin(currentDraft('pier.png', 'Pier'));
+    session.begin(currentDraft('cafe.png', 'Cafe'));
+    session.begin(currentDraft('night.png', 'Night'));
+    fixture.detectChanges();
+    tab(fixture, 'Current edits').click();
+
+    await vi.waitFor(() => {
+      expect(fixture.nativeElement.querySelectorAll('.history-grip').length).toBe(3);
+    });
+    const grip = fixture.nativeElement.querySelector('.history-grip') as HTMLButtonElement;
+
+    grip.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    fixture.detectChanges();
+
+    expect(session.edits().map((edit) => edit.fileName)).toEqual(['cafe.png', 'night.png', 'pier.png']);
+    expect(fixture.nativeElement.querySelector('.reorder-status')?.textContent).toContain('position 2 of 3');
+  });
+
   it('closes the edits dialog when a current edit is opened', async () => {
     const fixture = await create();
     const session = fixture.debugElement.injector.get(CurrentSession);
@@ -209,6 +318,22 @@ describe('EditHistoryList', () => {
     return fixture;
   }
 });
+
+function currentDraft(fileName: string, rightCaption: string) {
+  return {
+    fileName,
+    rightCaption,
+    date: '2024-06-15',
+    panX: 0.5,
+    panY: 0.5,
+    zoom: 1,
+    orientation: 'landscape' as const,
+    image: new Image(),
+    objectUrl: `blob:${fileName}`,
+    source: new Blob(),
+    handle: null,
+  };
+}
 
 function edit(id: string): EditRecord {
   return {

@@ -88,6 +88,25 @@ export class CurrentSession {
     }
   }
 
+  move(id: string, toIndex: number): boolean {
+    const edits = this.editsState();
+    const from = edits.findIndex((edit) => edit.id === id);
+    if (from < 0 || edits.length < 2) {
+      return false;
+    }
+
+    const to = Math.max(0, Math.min(edits.length - 1, toIndex));
+    if (from === to) {
+      return false;
+    }
+
+    const next = [...edits];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    this.editsState.set(next);
+    return true;
+  }
+
   discard(id: string): CurrentEdit | null {
     const edits = this.editsState();
     const index = edits.findIndex((edit) => edit.id === id);

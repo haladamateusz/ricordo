@@ -670,6 +670,10 @@ export class PhotoEditor {
     void this.restoreEdit(edit);
   }
 
+  protected saveCurrentOrder(): void {
+    this.persistSession();
+  }
+
   protected openCurrentEdit(edit: CurrentEdit): void {
     this.errorMessage.set('');
     this.pendingMessage.set('');
