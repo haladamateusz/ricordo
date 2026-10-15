@@ -59,6 +59,7 @@ describe('PhotoEditor', () => {
     FakeImage.failNext = false;
     FakeImage.hold = false;
     FakeImage.held = [];
+    FakeImage.size = { width: 800, height: 1200 };
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -242,6 +243,7 @@ describe('PhotoEditor', () => {
       panX: 0.2,
       panY: 0.7,
       zoom: 1.4,
+      orientation: 'landscape',
     });
 
     await loadPicked(fixture, pier);
@@ -260,6 +262,7 @@ describe('PhotoEditor', () => {
     expect(captionInput.value).toBe('Harbor');
     expect(state(fixture).pan()).toEqual({ x: 0.2, y: 0.7 });
     expect(state(fixture).zoom()).toBe(1.4);
+    expect(state(fixture).orientation()).toBe('landscape');
   });
 
   it('saves the framed photo through the share sheet on a phone', async () => {
@@ -347,7 +350,11 @@ describe('PhotoEditor', () => {
     await vi.waitFor(() => {
       expect(TestBed.inject(EditHistory).edits()[0]?.zoom).toBe(2);
     });
-    expect(TestBed.inject(EditHistory).edits()[0]).toMatchObject({ panX: 0.2, panY: 0.7 });
+    expect(TestBed.inject(EditHistory).edits()[0]).toMatchObject({
+      panX: 0.2,
+      panY: 0.7,
+      orientation: 'portrait',
+    });
   });
 
   it('keeps a separate current edit for each opened photo and saves changes after a second', async () => {
@@ -363,6 +370,7 @@ describe('PhotoEditor', () => {
       panX: 0.25,
       panY: 0.8,
       zoom: 2,
+      orientation: 'portrait',
     });
     fixture.detectChanges();
 
@@ -573,6 +581,7 @@ describe('PhotoEditor', () => {
       panX: 0.25,
       panY: 0.8,
       zoom: 2,
+      orientation: 'portrait',
     });
     fixture.detectChanges();
 
@@ -589,6 +598,36 @@ describe('PhotoEditor', () => {
     expect(text(fixture)).toContain('15 czerwca 2024');
     expect(state(fixture).pan()).toEqual({ x: 0.25, y: 0.8 });
     expect(state(fixture).zoom()).toBe(2);
+    expect(state(fixture).orientation()).toBe('portrait');
+  });
+
+  it('opens a saved edit on the frame ratio it was downloaded with', async () => {
+    stubElementBox();
+    const history = TestBed.inject(EditHistory);
+    await history.record({
+      fileName: 'harbor.png',
+      rightCaption: 'Pier light',
+      date: '2024-06-15',
+      thumbnail: new Blob(['thumb'], { type: 'image/jpeg' }),
+      image: new Blob(['png'], { type: 'image/png' }),
+      handle: null,
+      panX: 0.5,
+      panY: 0.5,
+      zoom: 1,
+      orientation: 'landscape',
+    });
+    fixture.detectChanges();
+
+    await vi.waitFor(() => {
+      expect(fixture.nativeElement.querySelector('.history-open')).toBeTruthy();
+    });
+    (fixture.nativeElement.querySelector('.history-open') as HTMLButtonElement).click();
+
+    await vi.waitFor(() => {
+      expect(text(fixture)).toContain('harbor.png');
+    });
+    expect(state(fixture).orientation()).toBe('landscape');
+    expect(state(fixture).frameRatio()).toBeGreaterThan(1);
   });
 
   it('reports when a saved edit has no photo copy', async () => {
@@ -604,6 +643,7 @@ describe('PhotoEditor', () => {
       panX: 0.5,
       panY: 0.5,
       zoom: 1,
+      orientation: null,
     });
     fixture.detectChanges();
 
@@ -638,6 +678,77 @@ describe('PhotoEditor', () => {
     restoreShare();
   });
 
+  it('loads the uploaded ratio and rotates between 10 by 15 and 15 by 10', async () => {
+    await loadPortrait(fixture);
+    expect(state(fixture).orientation()).toBe('portrait');
+    expect(state(fixture).frameRatio()).toBeLessThan(1);
+
+    const rotate = button(fixture, 'Rotate');
+    expect(rotate.getAttribute('aria-label')).toBe('Rotate to 15 by 10');
+    rotate.click();
+    fixture.detectChanges();
+
+    expect(state(fixture).orientation()).toBe('landscape');
+    expect(state(fixture).frameRatio()).toBeGreaterThan(1);
+    expect(button(fixture, 'Rotate').getAttribute('aria-label')).toBe('Rotate to 10 by 15');
+    expect(currentSession(fixture).edits()[0]?.orientation).toBe('landscape');
+
+    button(fixture, 'Rotate').click();
+    fixture.detectChanges();
+    expect(state(fixture).orientation()).toBe('portrait');
+    expect(currentSession(fixture).edits()[0]?.orientation).toBe('portrait');
+  });
+
+  it('starts a wide photo on a 15 by 10 frame', async () => {
+    FakeImage.size = { width: 1600, height: 900 };
+    await loadPortrait(fixture);
+
+    expect(state(fixture).orientation()).toBe('landscape');
+    expect(state(fixture).frameRatio()).toBeGreaterThan(1);
+    expect(button(fixture, 'Rotate').getAttribute('aria-label')).toBe('Rotate to 10 by 15');
+  });
+
+  it('uses the replacement photo ratio', async () => {
+    await loadPortrait(fixture);
+    button(fixture, 'Rotate').click();
+    fixture.detectChanges();
+    expect(state(fixture).orientation()).toBe('landscape');
+
+    const next = new File(['next'], 'pier.png', { type: 'image/png' });
+    pickPhoto.mockResolvedValue([{ file: next, handle: fileHandle(next) }]);
+    button(fixture, 'Replace').click();
+
+    await vi.waitFor(() => {
+      expect(text(fixture)).toContain('pier.png');
+    });
+    expect(state(fixture).orientation()).toBe('portrait');
+    expect(currentSession(fixture).edits()[0]?.orientation).toBe('portrait');
+  });
+
+  it('keeps each current edit on its own frame ratio', async () => {
+    stubElementBox();
+    await loadPortrait(fixture);
+    button(fixture, 'Rotate').click();
+    fixture.detectChanges();
+
+    await loadPicked(fixture, new File(['photo'], 'harbor.png', { type: 'image/png' }));
+    expect(state(fixture).orientation()).toBe('portrait');
+
+    button(fixture, 'Current edits').click();
+    await vi.waitFor(() => {
+      expect(fixture.nativeElement.querySelectorAll('#current-panel .history-open').length).toBe(2);
+    });
+    const rows = [
+      ...fixture.nativeElement.querySelectorAll('#current-panel .history-open'),
+    ] as HTMLButtonElement[];
+    rows[1]?.click();
+    await fixture.whenStable();
+
+    expect(text(fixture)).toContain('dog.png');
+    expect(state(fixture).orientation()).toBe('landscape');
+    expect(state(fixture).frameRatio()).toBeGreaterThan(1);
+  });
+
   it('resets the zoom when another photo is loaded', async () => {
     await loadPortrait(fixture);
     const overlay = fixture.nativeElement.querySelector('.photo-overlay') as HTMLElement;
@@ -663,6 +774,8 @@ function state(fixture: ComponentFixture<PhotoEditor>) {
     pan: { (): { x: number; y: number }; set(value: { x: number; y: number }): void };
     photo: () => unknown;
     captionModel: { set(value: { left: string; right: string }): void };
+    orientation: () => 'landscape' | 'portrait';
+    frameRatio: () => number;
   };
 }
 
@@ -836,12 +949,15 @@ class FakeImage {
   static failNext = false;
   static hold = false;
   static held: FakeImage[] = [];
+  static size = { width: 800, height: 1200 };
   naturalWidth = 800;
   naturalHeight = 1200;
   onload: (() => void) | null = null;
   onerror: (() => void) | null = null;
 
   set src(_value: string) {
+    this.naturalWidth = FakeImage.size.width;
+    this.naturalHeight = FakeImage.size.height;
     if (FakeImage.failNext) {
       FakeImage.failNext = false;
       this.onerror?.();

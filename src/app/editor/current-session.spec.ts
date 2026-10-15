@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 
-import { CurrentSession } from './current-session';
+import { CurrentSession, type CurrentDraft } from './current-session';
 
 describe('CurrentSession', () => {
   let session: CurrentSession;
@@ -30,6 +30,7 @@ describe('CurrentSession', () => {
       panX: 0.2,
       panY: 0.7,
       zoom: 2,
+      orientation: 'portrait',
     });
 
     expect(session.find(first)).toMatchObject({
@@ -38,6 +39,7 @@ describe('CurrentSession', () => {
       panX: 0.2,
       panY: 0.7,
       zoom: 2,
+      orientation: 'portrait',
     });
     expect(session.find(second)?.rightCaption).toBe('Night');
   });
@@ -105,7 +107,7 @@ describe('CurrentSession', () => {
     expect(session.activeId()).toBeNull();
   });
 
-  function draft(fileName: string, rightCaption: string) {
+  function draft(fileName: string, rightCaption: string): CurrentDraft {
     return {
       fileName,
       rightCaption,
@@ -113,6 +115,7 @@ describe('CurrentSession', () => {
       panX: 0.5,
       panY: 0.5,
       zoom: 1,
+      orientation: 'landscape',
       image: new Image(),
       objectUrl: `blob:${fileName}`,
       handle: null,

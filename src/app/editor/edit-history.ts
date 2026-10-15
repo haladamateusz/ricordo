@@ -1,5 +1,7 @@
 import { InjectionToken, Service, inject, signal } from '@angular/core';
 
+import type { Orientation } from './frame-layout';
+
 export const EDIT_HISTORY_LIMIT = 50;
 
 export interface StoredEdit {
@@ -12,6 +14,7 @@ export interface StoredEdit {
   panX: number;
   panY: number;
   zoom: number;
+  orientation: Orientation | null;
 }
 
 export interface EditRecord {
@@ -23,6 +26,7 @@ export interface EditRecord {
   panX: number;
   panY: number;
   zoom: number;
+  orientation: Orientation | null;
 }
 
 export interface StoredFileHandle {
@@ -42,6 +46,7 @@ export interface NewEdit {
   panX: number;
   panY: number;
   zoom: number;
+  orientation: Orientation | null;
 }
 
 export interface EditListDb {
@@ -118,6 +123,7 @@ export class EditHistory {
       panX: unitPosition(input.panX),
       panY: unitPosition(input.panY),
       zoom: framedZoom(input.zoom),
+      orientation: input.orientation,
     };
     const { edits, removedIds } = prependEdit(this.editsState(), entry);
 
@@ -463,6 +469,7 @@ function toRecord(edit: StoredEdit): EditRecord {
     panX: edit.panX,
     panY: edit.panY,
     zoom: edit.zoom,
+    orientation: edit.orientation,
   };
 }
 
@@ -490,7 +497,12 @@ function normalizeRecord(value: unknown): EditRecord | null {
     panX: unitPosition(entry['panX']),
     panY: unitPosition(entry['panY']),
     zoom: framedZoom(entry['zoom']),
+    orientation: framedOrientation(entry['orientation']),
   };
+}
+
+function framedOrientation(value: unknown): Orientation | null {
+  return value === 'landscape' || value === 'portrait' ? value : null;
 }
 
 function unitPosition(value: unknown): number {

@@ -106,6 +106,7 @@ describe('EditHistoryList', () => {
       panX: 0.2,
       panY: 0.7,
       zoom: 1.5,
+      orientation: 'landscape',
       image: new Image(),
       objectUrl: 'blob:harbor',
       handle: null,
@@ -168,6 +169,7 @@ describe('EditHistoryList', () => {
       panX: 0.5,
       panY: 0.5,
       zoom: 1,
+      orientation: 'landscape',
       image: new Image(),
       objectUrl: 'blob:harbor',
       handle: null,
@@ -216,6 +218,7 @@ function edit(id: string): EditRecord {
     panX: 0.5,
     panY: 0.5,
     zoom: 1,
+    orientation: 'landscape',
   };
 }
 

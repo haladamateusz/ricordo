@@ -1,6 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 
 import type { StoredFileHandle } from './edit-history';
+import type { Orientation } from './frame-layout';
 
 export interface CurrentEdit {
   id: string;
@@ -10,6 +11,7 @@ export interface CurrentEdit {
   panX: number;
   panY: number;
   zoom: number;
+  orientation: Orientation;
   thumbnailUrl: string;
   image: HTMLImageElement;
   objectUrl: string;
@@ -23,6 +25,7 @@ export interface CurrentDraft {
   panX: number;
   panY: number;
   zoom: number;
+  orientation: Orientation;
   image: HTMLImageElement;
   objectUrl: string;
   handle: StoredFileHandle | null;
@@ -34,6 +37,7 @@ export interface CurrentPatch {
   panX: number;
   panY: number;
   zoom: number;
+  orientation: Orientation;
 }
 
 @Injectable()

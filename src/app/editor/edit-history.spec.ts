@@ -36,6 +36,18 @@ describe('edit history storage', () => {
     expect(editRecordsFromUnknown([framed])[0]).toMatchObject({ panX: 1, panY: 0, zoom: 4 });
   });
 
+  it('keeps a saved frame ratio and leaves older edits unset', () => {
+    const saved = record('saved');
+    saved.orientation = 'portrait';
+    const older = record('older');
+    Reflect.deleteProperty(older, 'orientation');
+
+    expect(editRecordsFromUnknown([saved, older])).toMatchObject([
+      { orientation: 'portrait' },
+      { orientation: null },
+    ]);
+  });
+
   it('keeps the newest 50 edits and reports the dropped ids', () => {
     const current = Array.from({ length: EDIT_HISTORY_LIMIT }, (_, index) => edit(`${index}`));
     const { edits, removedIds } = prependEdit(current, edit('new'));
@@ -135,12 +147,18 @@ describe('EditHistory', () => {
         panX: 0.2,
         panY: 0.8,
         zoom: 2,
+        orientation: 'landscape',
       });
     }
 
     expect(history.edits()).toHaveLength(EDIT_HISTORY_LIMIT);
     expect(history.edits()[0]?.fileName).toBe(`${EDIT_HISTORY_LIMIT}.png`);
-    expect(history.edits()[0]).toMatchObject({ panX: 0.2, panY: 0.8, zoom: 2 });
+    expect(history.edits()[0]).toMatchObject({
+      panX: 0.2,
+      panY: 0.8,
+      zoom: 2,
+      orientation: 'landscape',
+    });
     expect(history.edits().some((item) => item.fileName === '0.png')).toBe(false);
     expect(handles.values.size).toBe(EDIT_HISTORY_LIMIT);
     expect(images.values.size).toBe(EDIT_HISTORY_LIMIT);
@@ -187,6 +205,7 @@ function record(id: string): EditRecord {
     panX: 0.5,
     panY: 0.5,
     zoom: 1,
+    orientation: 'landscape',
   };
 }
 

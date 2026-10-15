@@ -68,6 +68,7 @@ interface RestoredEdit {
   panX: number;
   panY: number;
   zoom: number;
+  orientation: Orientation | null;
 }
 
 interface LoadingRunner {
@@ -140,13 +141,10 @@ export class PhotoEditor {
   protected readonly runnerBands = loadingRunnerBands;
   protected readonly runnerLines = loadingRunnerLines;
 
-  protected readonly orientation = computed<Orientation>(() => {
-    const photo = this.photo();
-    if (!photo) {
-      return 'landscape';
-    }
-    return orientationOf(photo.image.naturalWidth, photo.image.naturalHeight);
-  });
+  protected readonly orientation = signal<Orientation>('landscape');
+  protected readonly rotateLabel = computed(() =>
+    this.orientation() === 'portrait' ? 'Rotate to 15 by 10' : 'Rotate to 10 by 15',
+  );
 
   protected readonly layout = computed(() => buildFrameLayout(this.orientation()));
 
@@ -333,6 +331,15 @@ export class PhotoEditor {
     this.launchPicker(true);
   }
 
+  protected rotateFrame(): void {
+    if (!this.photo()) {
+      return;
+    }
+
+    this.orientation.update((current) => (current === 'landscape' ? 'portrait' : 'landscape'));
+    this.saveActiveEdit();
+  }
+
   protected onFileSelected(event: Event): void {
     const replace = this.replaceOnNextLoad;
     this.replaceOnNextLoad = false;
@@ -509,6 +516,7 @@ export class PhotoEditor {
     const next = this.session.discard(this.session.activeId() ?? '');
     if (!next) {
       this.photo.set(null);
+      this.orientation.set('landscape');
       this.pan.set(CENTER_PAN);
       this.zoom.set(1);
       this.captionModel.set({ left: '', right: '' });
@@ -543,6 +551,7 @@ export class PhotoEditor {
       const date = this.captionModel().left;
       const pan = this.pan();
       const zoom = this.zoom();
+      const orientation = this.orientation();
       const frame = this.layout().photo;
       void Promise.all([
         originalPng(photo.image),
@@ -558,6 +567,7 @@ export class PhotoEditor {
           panX: pan.x,
           panY: pan.y,
           zoom,
+          orientation,
         }),
       );
     };
@@ -596,6 +606,7 @@ export class PhotoEditor {
       objectUrl: edit.objectUrl,
       handle: edit.handle,
     });
+    this.orientation.set(edit.orientation);
     this.pan.set({ x: edit.panX, y: edit.panY });
     this.zoom.set(edit.zoom);
     this.captionModel.set({ left: edit.date, right: edit.rightCaption });
@@ -622,6 +633,7 @@ export class PhotoEditor {
       panX: edit.panX,
       panY: edit.panY,
       zoom: edit.zoom,
+      orientation: edit.orientation,
     });
   }
 
@@ -778,6 +790,7 @@ export class PhotoEditor {
       objectUrl: draft.objectUrl,
       handle: draft.handle,
     });
+    this.orientation.set(imageOrientation(draft.image));
     this.pan.set(CENTER_PAN);
     this.zoom.set(1);
     this.captionModel.set({ left: draft.date, right: '' });
@@ -830,6 +843,7 @@ export class PhotoEditor {
         objectUrl: display.objectUrl,
         handle,
       });
+      this.orientation.set(restored?.orientation ?? imageOrientation(display.image));
       this.pendingMessage.set('');
       this.errorMessage.set('');
       this.loadingCount.set(0);
@@ -887,6 +901,7 @@ export class PhotoEditor {
     const captions = this.captionModel();
     const pan = this.pan();
     const zoom = this.zoom();
+    const orientation = this.orientation();
     const id = this.session.begin({
       fileName: photo.fileName,
       rightCaption: captions.right,
@@ -894,12 +909,13 @@ export class PhotoEditor {
       panX: pan.x,
       panY: pan.y,
       zoom,
+      orientation,
       image: photo.image,
       objectUrl: photo.objectUrl,
       handle: photo.handle,
     });
     this.committedKey = this.draftKey();
-    void this.refreshThumbnail(id, pan.x, pan.y, zoom);
+    void this.refreshThumbnail(id, pan.x, pan.y, zoom, orientation);
   }
 
   private replaceCurrentEdit(): boolean {
@@ -912,6 +928,7 @@ export class PhotoEditor {
     const captions = this.captionModel();
     const pan = this.pan();
     const zoom = this.zoom();
+    const orientation = this.orientation();
     const replaced = this.session.replacePhoto(id, {
       fileName: photo.fileName,
       rightCaption: captions.right,
@@ -919,6 +936,7 @@ export class PhotoEditor {
       panX: pan.x,
       panY: pan.y,
       zoom,
+      orientation,
       image: photo.image,
       objectUrl: photo.objectUrl,
       handle: photo.handle,
@@ -928,7 +946,7 @@ export class PhotoEditor {
     }
 
     this.committedKey = this.draftKey();
-    void this.refreshThumbnail(id, pan.x, pan.y, zoom);
+    void this.refreshThumbnail(id, pan.x, pan.y, zoom, orientation);
     return true;
   }
 
@@ -942,15 +960,17 @@ export class PhotoEditor {
     const captions = this.captionModel();
     const pan = this.pan();
     const zoom = this.zoom();
+    const orientation = this.orientation();
     this.session.write(id, {
       rightCaption: captions.right,
       date: captions.left,
       panX: pan.x,
       panY: pan.y,
       zoom,
+      orientation,
     });
     this.committedKey = this.draftKey();
-    void this.refreshThumbnail(id, pan.x, pan.y, zoom);
+    void this.refreshThumbnail(id, pan.x, pan.y, zoom, orientation);
   }
 
   private async refreshThumbnail(
@@ -958,18 +978,24 @@ export class PhotoEditor {
     panX: number,
     panY: number,
     zoom: number,
+    orientation: Orientation,
   ): Promise<void> {
     const edit = this.session.find(id);
     if (!edit) {
       return;
     }
 
-    const frame = buildFrameLayout(
-      orientationOf(edit.image.naturalWidth, edit.image.naturalHeight),
-    ).photo;
+    const frame = buildFrameLayout(orientation).photo;
     const blob = await thumbnailBlob(edit.image, frame.width, frame.height, panX, panY, zoom);
     const latest = this.session.find(id);
-    if (!blob || !latest || latest.panX !== panX || latest.panY !== panY || latest.zoom !== zoom) {
+    if (
+      !blob ||
+      !latest ||
+      latest.panX !== panX ||
+      latest.panY !== panY ||
+      latest.zoom !== zoom ||
+      latest.orientation !== orientation
+    ) {
       return;
     }
 
@@ -986,6 +1012,7 @@ export class PhotoEditor {
       String(pan.x),
       String(pan.y),
       String(this.zoom()),
+      this.orientation(),
     ].join('\u0000');
   }
 
@@ -1033,6 +1060,10 @@ export class PhotoEditor {
       URL.revokeObjectURL(photo.objectUrl);
     }
   }
+}
+
+function imageOrientation(image: HTMLImageElement): Orientation {
+  return orientationOf(image.naturalWidth, image.naturalHeight);
 }
 
 function incomingError(failure: IncomingFailure, noPhoto: boolean): string {
