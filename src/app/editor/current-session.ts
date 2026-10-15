@@ -107,6 +107,26 @@ export class CurrentSession {
     return true;
   }
 
+  moveGroup(ids: readonly string[], anchorId: string, anchorIndex: number): boolean {
+    const edits = this.editsState();
+    const wanted = new Set(ids);
+    const moving = edits.filter((edit) => wanted.has(edit.id));
+    const anchorOffset = moving.findIndex((edit) => edit.id === anchorId);
+    if (anchorOffset < 0 || moving.length < 2 || edits.length < 2) {
+      return false;
+    }
+
+    const rest = edits.filter((edit) => !wanted.has(edit.id));
+    const insertAt = Math.max(0, Math.min(rest.length, anchorIndex - anchorOffset));
+    const next = [...rest.slice(0, insertAt), ...moving, ...rest.slice(insertAt)];
+    if (next.every((edit, index) => edit.id === edits[index]?.id)) {
+      return false;
+    }
+
+    this.editsState.set(next);
+    return true;
+  }
+
   discard(id: string): CurrentEdit | null {
     const edits = this.editsState();
     const index = edits.findIndex((edit) => edit.id === id);

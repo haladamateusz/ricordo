@@ -55,7 +55,9 @@ export class EditHistoryList {
   protected readonly session = inject(CurrentSession);
   protected readonly formatDate = formatCaptionDate;
   protected readonly failedThumbs = signal<ReadonlySet<string>>(new Set());
+  protected readonly picked = signal<ReadonlySet<string>>(new Set());
   protected readonly draggingId = signal<string | null>(null);
+  protected readonly draggingIds = signal<readonly string[]>([]);
   protected readonly reorderStatus = signal('');
   private readonly dragTop = signal<number | null>(null);
   private reorder: ReorderDrag | null = null;
@@ -156,9 +158,29 @@ export class EditHistoryList {
     this.drawer.close();
   }
 
-  protected chooseCurrent(edit: CurrentEdit): void {
+  protected chooseCurrent(event: MouseEvent, edit: CurrentEdit): void {
+    if (this.modifierSelect(event, edit)) {
+      return;
+    }
+    this.picked.set(new Set());
     this.currentSelected.emit(edit);
     this.drawer.close();
+  }
+
+  protected onGripClick(event: MouseEvent, edit: CurrentEdit): void {
+    this.modifierSelect(event, edit);
+  }
+
+  protected isPicked(id: string): boolean {
+    return this.picked().has(id);
+  }
+
+  protected isDragged(id: string): boolean {
+    return this.draggingIds().includes(id);
+  }
+
+  protected pickedLabel(edit: CurrentEdit): string {
+    return this.isPicked(edit.id) ? `${this.rowLabel(edit)}, selected` : this.rowLabel(edit);
   }
 
   protected currentKey(index: number): string {
@@ -166,11 +188,13 @@ export class EditHistoryList {
   }
 
   protected currentTransform(start: number, id: string): string {
-    if (this.draggingId() === id) {
-      const top = this.dragTop();
-      if (top !== null) {
-        return `translateY(${top}px)`;
-      }
+    const ids = this.draggingIds();
+    const index = ids.indexOf(id);
+    const top = this.dragTop();
+    if (index >= 0 && top !== null) {
+      const anchor = ids.indexOf(this.draggingId() ?? '');
+      const offset = (index - (anchor < 0 ? 0 : anchor)) * historyRowHeight;
+      return `translateY(${top + offset}px)`;
     }
     return `translateY(${start}px)`;
   }
@@ -186,6 +210,7 @@ export class EditHistoryList {
 
     this.reorder = {
       id: edit.id,
+      ids: [edit.id],
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
@@ -204,6 +229,10 @@ export class EditHistoryList {
       return;
     }
 
+    if (!drag.moved) {
+      drag.ids = this.dragIds(drag.id);
+      this.draggingIds.set(drag.ids);
+    }
     drag.moved = true;
     if (event.cancelable) {
       event.preventDefault();
@@ -222,7 +251,7 @@ export class EditHistoryList {
     if (drag.moved) {
       this.swallowFollowingClick();
       if (drag.changed) {
-        this.announceMove(drag.id);
+        this.announceMove(drag.ids);
         this.reordered.emit();
       }
     }
@@ -234,12 +263,17 @@ export class EditHistoryList {
       return;
     }
     event.preventDefault();
+    const ids = this.dragIds(edit.id);
     const index = this.session.edits().findIndex((item) => item.id === edit.id);
     const target = event.key === 'ArrowUp' ? index - 1 : index + 1;
-    if (!this.session.move(edit.id, target)) {
+    const moved =
+      ids.length > 1
+        ? this.session.moveGroup(ids, edit.id, target)
+        : this.session.move(edit.id, target);
+    if (!moved) {
       return;
     }
-    this.announceMove(edit.id);
+    this.announceMove(ids);
     this.reordered.emit();
   }
 
@@ -254,8 +288,15 @@ export class EditHistoryList {
     const top = contentY - drag.grabOffset;
     this.dragTop.set(top);
     const count = this.session.edits().length;
-    const target = Math.min(count - 1, Math.max(0, Math.floor((top + historyRowHeight / 2) / historyRowHeight)));
-    if (this.session.move(drag.id, target)) {
+    const target = Math.min(
+      count - 1,
+      Math.max(0, Math.floor((top + historyRowHeight / 2) / historyRowHeight)),
+    );
+    const moved =
+      drag.ids.length > 1
+        ? this.session.moveGroup(drag.ids, drag.id, target)
+        : this.session.move(drag.id, target);
+    if (moved) {
       drag.changed = true;
     }
   }
@@ -276,7 +317,8 @@ export class EditHistoryList {
       if (rect.height < edge * 2) {
         return;
       }
-      const delta = this.pointerY < rect.top + edge ? -12 : this.pointerY > rect.bottom - edge ? 12 : 0;
+      const delta =
+        this.pointerY < rect.top + edge ? -12 : this.pointerY > rect.bottom - edge ? 12 : 0;
       if (delta === 0 || scroll.scrollHeight <= scroll.clientHeight) {
         return;
       }
@@ -287,14 +329,76 @@ export class EditHistoryList {
     this.scrollFrame = requestAnimationFrame(tick);
   }
 
-  private announceMove(id: string): void {
+  private dragIds(anchorId: string): readonly string[] {
+    const picked = this.session
+      .edits()
+      .filter((edit) => this.picked().has(edit.id))
+      .map((edit) => edit.id);
+    return picked.includes(anchorId) && picked.length > 1 ? picked : [anchorId];
+  }
+
+  private modifierSelect(event: MouseEvent, edit: CurrentEdit): boolean {
+    if (!event.metaKey && !event.ctrlKey) {
+      return false;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.togglePicked(edit.id);
+    return true;
+  }
+
+  private togglePicked(id: string): void {
+    const edit = this.session.find(id);
+    if (!edit) {
+      return;
+    }
+    const activeId = this.session.activeId();
+    const next = new Set(this.picked());
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    const others = [...next].some((pickedId) => pickedId !== activeId);
+    if (activeId && others) {
+      next.add(activeId);
+    } else if (activeId && id !== activeId) {
+      next.delete(activeId);
+    }
+    this.picked.set(next);
+    const label = this.rowLabel(edit);
+    const status = next.has(id)
+      ? `${label} selected. ${next.size} selected.`
+      : `${label} unselected. ${next.size} selected.`;
+    this.reorderStatus.set(status);
+  }
+
+  private announceMove(ids: readonly string[]): void {
     const edits = this.session.edits();
-    const index = edits.findIndex((edit) => edit.id === id);
+    if (ids.length > 1) {
+      const indexes = ids
+        .map((id) => edits.findIndex((edit) => edit.id === id))
+        .filter((index) => index >= 0)
+        .sort((left, right) => left - right);
+      const first = indexes[0];
+      const last = indexes[indexes.length - 1];
+      if (first === undefined || last === undefined) {
+        return;
+      }
+      this.reorderStatus.set(
+        `${ids.length} edits moved together to positions ${first + 1} through ${last + 1}.`,
+      );
+      return;
+    }
+
+    const index = edits.findIndex((edit) => edit.id === ids[0]);
     const edit = edits[index];
     if (!edit) {
       return;
     }
-    this.reorderStatus.set(`${this.rowLabel(edit)} moved to position ${index + 1} of ${edits.length}.`);
+    this.reorderStatus.set(
+      `${this.rowLabel(edit)} moved to position ${index + 1} of ${edits.length}.`,
+    );
   }
 
   private swallowFollowingClick(): void {
@@ -324,6 +428,7 @@ export class EditHistoryList {
     this.scrollFrame = 0;
     this.reorder = null;
     this.draggingId.set(null);
+    this.draggingIds.set([]);
     this.dragTop.set(null);
   }
 
@@ -350,9 +455,9 @@ export class EditHistoryList {
       return;
     }
 
-    const focusable = [...this.host.nativeElement.querySelectorAll<HTMLElement>('button, a[href], input')].filter(
-      (element) => !element.hasAttribute('disabled') && element.getClientRects().length > 0,
-    );
+    const focusable = [
+      ...this.host.nativeElement.querySelectorAll<HTMLElement>('button, a[href], input'),
+    ].filter((element) => !element.hasAttribute('disabled') && element.getClientRects().length > 0);
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
     if (!first || !last) {
@@ -382,6 +487,7 @@ export class EditHistoryList {
 
 interface ReorderDrag {
   id: string;
+  ids: readonly string[];
   pointerId: number;
   startX: number;
   startY: number;

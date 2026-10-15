@@ -83,6 +83,23 @@ describe('CurrentSession', () => {
     expect(session.move('missing', 0)).toBe(false);
   });
 
+  it('packs separated edits into one run at the drop and leaves the open edit active', () => {
+    const pier = session.begin(draft('pier.png', 'Pier'));
+    const cafe = session.begin(draft('cafe.png', 'Cafe'));
+    const night = session.begin(draft('night.png', 'Night'));
+    const lake = session.begin(draft('lake.png', 'Lake'));
+
+    expect(session.moveGroup([lake, cafe], cafe, 1)).toBe(true);
+    expect(session.edits().map((edit) => edit.id)).toEqual([lake, cafe, night, pier]);
+
+    expect(session.moveGroup([lake, cafe], lake, 2)).toBe(true);
+    expect(session.edits().map((edit) => edit.id)).toEqual([night, pier, lake, cafe]);
+    expect(session.activeId()).toBe(lake);
+    expect(session.moveGroup([lake, cafe], lake, 2)).toBe(false);
+    expect(session.moveGroup([lake], lake, 0)).toBe(false);
+    expect(session.moveGroup([cafe, pier], 'missing', 1)).toBe(false);
+  });
+
   it('drops an edit and activates the one before it', () => {
     const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     const first = session.begin(draft('harbor.png', 'Pier'));

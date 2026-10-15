@@ -174,18 +174,28 @@ describe('EditHistoryList', () => {
     await vi.waitFor(() => {
       expect(fixture.nativeElement.querySelectorAll('.history-row.is-sortable').length).toBe(3);
     });
-    const scroll = fixture.nativeElement.querySelector('.history-row.is-sortable')?.closest('.history-scroll');
+    const scroll = fixture.nativeElement
+      .querySelector('.history-row.is-sortable')
+      ?.closest('.history-scroll');
     if (!(scroll instanceof HTMLElement)) {
       throw new Error('Missing current edits list');
     }
     scroll.getBoundingClientRect = () => new DOMRect(0, 0, 320, 480);
-    const rows = [...fixture.nativeElement.querySelectorAll('#current-panel .history-row')] as HTMLElement[];
+    const rows = [
+      ...fixture.nativeElement.querySelectorAll('#current-panel .history-row'),
+    ] as HTMLElement[];
     rows.forEach((row, index) => {
       row.getBoundingClientRect = () => new DOMRect(0, index * 88, 320, 88);
     });
 
     rows[0].dispatchEvent(
-      new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 40, clientY: 30, pointerId: 1 }),
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        clientX: 40,
+        clientY: 30,
+        pointerId: 1,
+      }),
     );
     scroll.dispatchEvent(
       new PointerEvent('pointermove', { bubbles: true, clientX: 40, clientY: 130, pointerId: 1 }),
@@ -196,7 +206,11 @@ describe('EditHistoryList', () => {
     (rows[0].querySelector('.history-open') as HTMLButtonElement).click();
     fixture.detectChanges();
 
-    expect(session.edits().map((edit) => edit.fileName)).toEqual(['cafe.png', 'night.png', 'pier.png']);
+    expect(session.edits().map((edit) => edit.fileName)).toEqual([
+      'cafe.png',
+      'night.png',
+      'pier.png',
+    ]);
     expect(session.activeId()).toBe(session.edits()[1]?.id);
     expect(drawer.open()).toBe(true);
   });
@@ -217,18 +231,28 @@ describe('EditHistoryList', () => {
     await vi.waitFor(() => {
       expect(fixture.nativeElement.querySelectorAll('.history-row.is-sortable').length).toBe(3);
     });
-    const scroll = fixture.nativeElement.querySelector('.history-row.is-sortable')?.closest('.history-scroll');
+    const scroll = fixture.nativeElement
+      .querySelector('.history-row.is-sortable')
+      ?.closest('.history-scroll');
     if (!(scroll instanceof HTMLElement)) {
       throw new Error('Missing current edits list');
     }
     scroll.getBoundingClientRect = () => new DOMRect(0, 0, 320, 480);
-    const rows = [...fixture.nativeElement.querySelectorAll('.history-row.is-sortable')] as HTMLElement[];
+    const rows = [
+      ...fixture.nativeElement.querySelectorAll('.history-row.is-sortable'),
+    ] as HTMLElement[];
     rows.forEach((row, index) => {
       row.getBoundingClientRect = () => new DOMRect(0, index * 88, 320, 88);
     });
 
     rows[1].dispatchEvent(
-      new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 16, clientY: 118, pointerId: 1 }),
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        clientX: 16,
+        clientY: 118,
+        pointerId: 1,
+      }),
     );
     scroll.dispatchEvent(
       new PointerEvent('pointermove', { bubbles: true, clientX: 16, clientY: 150, pointerId: 1 }),
@@ -265,8 +289,219 @@ describe('EditHistoryList', () => {
     grip.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
     fixture.detectChanges();
 
-    expect(session.edits().map((edit) => edit.fileName)).toEqual(['cafe.png', 'night.png', 'pier.png']);
-    expect(fixture.nativeElement.querySelector('.reorder-status')?.textContent).toContain('position 2 of 3');
+    expect(session.edits().map((edit) => edit.fileName)).toEqual([
+      'cafe.png',
+      'night.png',
+      'pier.png',
+    ]);
+    expect(fixture.nativeElement.querySelector('.reorder-status')?.textContent).toContain(
+      'position 2 of 3',
+    );
+  });
+
+  it('selects several current edits with command or control without opening them', async () => {
+    const fixture = await create();
+    const session = fixture.debugElement.injector.get(CurrentSession);
+    const drawer = fixture.debugElement.injector.get(EditDrawer);
+    const opened: string[] = [];
+    session.begin(currentDraft('pier.png', 'Pier'));
+    session.begin(currentDraft('cafe.png', 'Cafe'));
+    session.begin(currentDraft('night.png', 'Night'));
+    fixture.componentInstance.currentSelected.subscribe((edit) => opened.push(edit.fileName));
+    drawer.show();
+    fixture.detectChanges();
+    tab(fixture, 'Current edits').click();
+
+    await vi.waitFor(() => {
+      expect(fixture.nativeElement.querySelectorAll('.history-open').length).toBe(3);
+    });
+    const openers = [
+      ...fixture.nativeElement.querySelectorAll('.history-open'),
+    ] as HTMLButtonElement[];
+    openers[0].dispatchEvent(new MouseEvent('click', { bubbles: true, metaKey: true }));
+    openers[2].dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
+    fixture.detectChanges();
+
+    const rows = [
+      ...fixture.nativeElement.querySelectorAll('.history-row.is-sortable'),
+    ] as HTMLElement[];
+    expect(rows[0].classList.contains('is-picked')).toBe(true);
+    expect(rows[1].classList.contains('is-picked')).toBe(false);
+    expect(rows[2].classList.contains('is-picked')).toBe(true);
+    expect(openers[0].getAttribute('aria-label')).toContain('selected');
+    expect(opened).toEqual([]);
+    expect(drawer.open()).toBe(true);
+
+    openers[0].dispatchEvent(new MouseEvent('click', { bubbles: true, metaKey: true }));
+    fixture.detectChanges();
+    expect(rows[0].classList.contains('is-picked')).toBe(true);
+
+    openers[2].dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
+    fixture.detectChanges();
+    expect(rows[0].classList.contains('is-picked')).toBe(false);
+    expect(rows[2].classList.contains('is-picked')).toBe(false);
+  });
+
+  it('adds the open edit when another row is selected and drags them together', async () => {
+    const fixture = await create();
+    const session = fixture.debugElement.injector.get(CurrentSession);
+    session.begin(currentDraft('pier.png', 'Pier'));
+    session.begin(currentDraft('cafe.png', 'Cafe'));
+    const night = session.begin(currentDraft('night.png', 'Night'));
+    fixture.detectChanges();
+    tab(fixture, 'Current edits').click();
+
+    await vi.waitFor(() => {
+      expect(fixture.nativeElement.querySelectorAll('.history-open').length).toBe(3);
+    });
+    const openers = [
+      ...fixture.nativeElement.querySelectorAll('.history-open'),
+    ] as HTMLButtonElement[];
+    openers[1].dispatchEvent(new MouseEvent('click', { bubbles: true, metaKey: true }));
+    fixture.detectChanges();
+
+    const rows = [
+      ...fixture.nativeElement.querySelectorAll('.history-row.is-sortable'),
+    ] as HTMLElement[];
+    expect(rows[0].classList.contains('is-picked')).toBe(true);
+    expect(rows[1].classList.contains('is-picked')).toBe(true);
+    expect(rows[2].classList.contains('is-picked')).toBe(false);
+    expect(openers[0].getAttribute('aria-label')).toContain('selected');
+    expect(fixture.nativeElement.querySelector('.reorder-status')?.textContent).toContain(
+      '2 selected',
+    );
+
+    const scroll = rows[0].closest('.history-scroll');
+    if (!(scroll instanceof HTMLElement)) {
+      throw new Error('Missing current edits list');
+    }
+    scroll.getBoundingClientRect = () => new DOMRect(0, 0, 320, 480);
+    rows.forEach((row, index) => {
+      row.getBoundingClientRect = () => new DOMRect(0, index * 88, 320, 88);
+    });
+
+    rows[0].dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        clientX: 40,
+        clientY: 30,
+        pointerId: 1,
+      }),
+    );
+    scroll.dispatchEvent(
+      new PointerEvent('pointermove', { bubbles: true, clientX: 40, clientY: 100, pointerId: 1 }),
+    );
+    scroll.dispatchEvent(
+      new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 100, pointerId: 1 }),
+    );
+    fixture.detectChanges();
+
+    expect(session.edits().map((edit) => edit.fileName)).toEqual([
+      'pier.png',
+      'night.png',
+      'cafe.png',
+    ]);
+    expect(session.activeId()).toBe(night);
+  });
+
+  it('drops separated edits one after another and leaves the others in place', async () => {
+    const fixture = await create();
+    const session = fixture.debugElement.injector.get(CurrentSession);
+    session.begin(currentDraft('pier.png', 'Pier'));
+    session.begin(currentDraft('cafe.png', 'Cafe'));
+    session.begin(currentDraft('night.png', 'Night'));
+    session.begin(currentDraft('lake.png', 'Lake'));
+    fixture.detectChanges();
+    tab(fixture, 'Current edits').click();
+
+    await vi.waitFor(() => {
+      expect(fixture.nativeElement.querySelectorAll('.history-open').length).toBe(4);
+    });
+    const openers = [
+      ...fixture.nativeElement.querySelectorAll('.history-open'),
+    ] as HTMLButtonElement[];
+    openers[0].dispatchEvent(new MouseEvent('click', { bubbles: true, metaKey: true }));
+    openers[2].dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
+    fixture.detectChanges();
+
+    const scroll = fixture.nativeElement
+      .querySelector('.history-row.is-sortable')
+      ?.closest('.history-scroll');
+    if (!(scroll instanceof HTMLElement)) {
+      throw new Error('Missing current edits list');
+    }
+    scroll.getBoundingClientRect = () => new DOMRect(0, 0, 320, 480);
+    const rows = [
+      ...fixture.nativeElement.querySelectorAll('.history-row.is-sortable'),
+    ] as HTMLElement[];
+    rows.forEach((row, index) => {
+      row.getBoundingClientRect = () => new DOMRect(0, index * 88, 320, 88);
+    });
+
+    rows[0].dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        clientX: 40,
+        clientY: 30,
+        pointerId: 1,
+      }),
+    );
+    scroll.dispatchEvent(
+      new PointerEvent('pointermove', { bubbles: true, clientX: 40, clientY: 200, pointerId: 1 }),
+    );
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.history-row.is-lifted').length).toBe(2);
+
+    scroll.dispatchEvent(
+      new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 200, pointerId: 1 }),
+    );
+    fixture.detectChanges();
+
+    expect(session.edits().map((edit) => edit.fileName)).toEqual([
+      'night.png',
+      'pier.png',
+      'lake.png',
+      'cafe.png',
+    ]);
+    expect(fixture.nativeElement.querySelector('.reorder-status')?.textContent).toContain(
+      'positions 3 through 4',
+    );
+    expect(session.activeId()).toBe(session.edits()[2]?.id);
+  });
+
+  it('moves a separated selection together from the keyboard', async () => {
+    const fixture = await create();
+    const session = fixture.debugElement.injector.get(CurrentSession);
+    session.begin(currentDraft('pier.png', 'Pier'));
+    session.begin(currentDraft('cafe.png', 'Cafe'));
+    session.begin(currentDraft('night.png', 'Night'));
+    fixture.detectChanges();
+    tab(fixture, 'Current edits').click();
+
+    await vi.waitFor(() => {
+      expect(fixture.nativeElement.querySelectorAll('.history-grip').length).toBe(3);
+    });
+    const openers = [
+      ...fixture.nativeElement.querySelectorAll('.history-open'),
+    ] as HTMLButtonElement[];
+    openers[0].dispatchEvent(new MouseEvent('click', { bubbles: true, metaKey: true }));
+    openers[2].dispatchEvent(new MouseEvent('click', { bubbles: true, metaKey: true }));
+    fixture.detectChanges();
+
+    const grip = fixture.nativeElement.querySelector('.history-grip') as HTMLButtonElement;
+    grip.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    fixture.detectChanges();
+
+    expect(session.edits().map((edit) => edit.fileName)).toEqual([
+      'cafe.png',
+      'night.png',
+      'pier.png',
+    ]);
+    expect(fixture.nativeElement.querySelector('.reorder-status')?.textContent).toContain(
+      'positions 2 through 3',
+    );
   });
 
   it('closes the edits dialog when a current edit is opened', async () => {

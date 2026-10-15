@@ -239,18 +239,44 @@
   background: color-mix(in srgb, var(--text) 6%, var(--surface));
 }
 
+.history-row.is-picked {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.history-row.is-active.is-picked {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.history-row.is-picked.is-sortable:hover,
+.history-row.is-active.is-picked.is-sortable:hover {
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+}
+
 .history-row.is-sortable .history-open:hover,
-.history-row.is-active .history-open[aria-current='true'] {
+.history-row.is-active .history-open[aria-current='true'],
+.history-row.is-picked .history-open,
+.history-row.is-picked .history-open:hover,
+.history-row.is-picked .history-open[aria-current='true'] {
   background: transparent;
   box-shadow: none;
 }
 
 .history-row.is-lifted,
-.history-row.is-active.is-lifted {
+.history-row.is-active.is-lifted,
+.history-row.is-picked.is-lifted {
   z-index: 2;
   background: var(--sidebar);
   box-shadow: 0 10px 24px color-mix(in srgb, var(--text) 18%, transparent);
   transition: none;
+}
+
+.history-scroll.is-reordering .history-row.is-lifted {
+  transition: none;
+}
+
+.history-row.is-lifted.is-anchor {
+  z-index: 3;
 }
 
 .history-grip {
