@@ -359,6 +359,27 @@ input:focus-visible,
   gap: 0.35rem;
 }
 
+.button .orientation-icon {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.orientation-back {
+  opacity: 0.45;
+}
+
+.orientation-front {
+  fill: var(--secondary);
+}
+
+.button:hover:not(:disabled) .orientation-front {
+  fill: var(--button-hover);
+}
+
+.button:active:not(:disabled) .orientation-front {
+  fill: var(--button-active);
+}
+
 .error {
   min-height: 1.25rem;
   margin: 0;

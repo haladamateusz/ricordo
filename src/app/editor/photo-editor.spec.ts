@@ -704,17 +704,19 @@ describe('PhotoEditor', () => {
     expect(state(fixture).orientation()).toBe('portrait');
     expect(state(fixture).frameRatio()).toBeLessThan(1);
 
-    const rotate = button(fixture, 'Rotate');
-    expect(rotate.getAttribute('aria-label')).toBe('Rotate to 15 by 10');
+    const rotate = button(fixture, 'Orientation');
+    expect(rotate.getAttribute('aria-label')).toBe('Orientation to 15 by 10');
+    expect(orientationFront(fixture)).toEqual({ width: '15.5', height: '11' });
     rotate.click();
     fixture.detectChanges();
 
     expect(state(fixture).orientation()).toBe('landscape');
     expect(state(fixture).frameRatio()).toBeGreaterThan(1);
-    expect(button(fixture, 'Rotate').getAttribute('aria-label')).toBe('Rotate to 10 by 15');
+    expect(button(fixture, 'Orientation').getAttribute('aria-label')).toBe('Orientation to 10 by 15');
+    expect(orientationFront(fixture)).toEqual({ width: '9.5', height: '15.5' });
     expect(currentSession(fixture).edits()[0]?.orientation).toBe('landscape');
 
-    button(fixture, 'Rotate').click();
+    button(fixture, 'Orientation').click();
     fixture.detectChanges();
     expect(state(fixture).orientation()).toBe('portrait');
     expect(currentSession(fixture).edits()[0]?.orientation).toBe('portrait');
@@ -726,12 +728,12 @@ describe('PhotoEditor', () => {
 
     expect(state(fixture).orientation()).toBe('landscape');
     expect(state(fixture).frameRatio()).toBeGreaterThan(1);
-    expect(button(fixture, 'Rotate').getAttribute('aria-label')).toBe('Rotate to 10 by 15');
+    expect(button(fixture, 'Orientation').getAttribute('aria-label')).toBe('Orientation to 10 by 15');
   });
 
   it('uses the replacement photo ratio', async () => {
     await loadPortrait(fixture);
-    button(fixture, 'Rotate').click();
+    button(fixture, 'Orientation').click();
     fixture.detectChanges();
     expect(state(fixture).orientation()).toBe('landscape');
 
@@ -749,7 +751,7 @@ describe('PhotoEditor', () => {
   it('keeps each current edit on its own frame ratio', async () => {
     stubElementBox();
     await loadPortrait(fixture);
-    button(fixture, 'Rotate').click();
+    button(fixture, 'Orientation').click();
     fixture.detectChanges();
 
     await loadPicked(fixture, new File(['photo'], 'harbor.png', { type: 'image/png' }));
@@ -990,6 +992,17 @@ function fileInput(fixture: ComponentFixture<PhotoEditor>): HTMLInputElement {
 
 function text(fixture: ComponentFixture<PhotoEditor>): string {
   return (fixture.nativeElement as HTMLElement).textContent ?? '';
+}
+
+function orientationFront(fixture: ComponentFixture<PhotoEditor>): {
+  width: string | null;
+  height: string | null;
+} {
+  const front = fixture.nativeElement.querySelector('.orientation-front');
+  return {
+    width: front?.getAttribute('width') ?? null,
+    height: front?.getAttribute('height') ?? null,
+  };
 }
 
 function button(fixture: ComponentFixture<PhotoEditor>, name: string): HTMLButtonElement {

@@ -92,6 +92,8 @@ interface LoadingRunner {
 }
 
 const CENTER_PAN: Pan = { x: 0.5, y: 0.5 };
+const portraitGlyph = { x: '1.5', y: '1.5', width: '9.5', height: '15.5' };
+const landscapeGlyph = { x: '7', y: '9', width: '15.5', height: '11' };
 const RUNNER_BAND_COUNT = 12;
 const loadingRunnerBands = Array.from({ length: RUNNER_BAND_COUNT }, (_, index) => ({
   fraction: (RUNNER_BAND_COUNT - index) / RUNNER_BAND_COUNT,
@@ -173,8 +175,13 @@ export class PhotoEditor {
   protected readonly runnerLines = loadingRunnerLines;
 
   protected readonly orientation = signal<Orientation>('landscape');
-  protected readonly rotateLabel = computed(() =>
-    this.orientation() === 'portrait' ? 'Rotate to 15 by 10' : 'Rotate to 10 by 15',
+  protected readonly orientationLabel = computed(() =>
+    this.orientation() === 'portrait' ? 'Orientation to 15 by 10' : 'Orientation to 10 by 15',
+  );
+  protected readonly orientationIcon = computed(() =>
+    this.orientation() === 'portrait'
+      ? { back: portraitGlyph, front: landscapeGlyph }
+      : { back: landscapeGlyph, front: portraitGlyph },
   );
 
   protected readonly layout = computed(() => buildFrameLayout(this.orientation()));
