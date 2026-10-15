@@ -1,4 +1,59 @@
-<div class="editor">
+@if (restoreOffer(); as offer) {
+  <div class="restore">
+    <div
+      #restoreDialog
+      class="restore-card"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="restore-title"
+      aria-describedby="restore-copy restore-files"
+      [attr.aria-busy]="restoring() ? 'true' : null"
+      (keydown)="onRestoreKey($event)"
+    >
+      <h2 id="restore-title">Restore previous session?</h2>
+      <p id="restore-copy">{{ restoreSummary() }}</p>
+      <ul id="restore-files" class="sr-only">
+        @for (edit of offer.edits; track edit.id) {
+          <li>{{ edit.fileName }}</li>
+        }
+      </ul>
+      <ul class="restore-photos">
+        @for (edit of restorePreview(); track edit.id) {
+          <li>
+            @if (edit.thumbnailUrl) {
+              <img [src]="edit.thumbnailUrl" alt="" />
+            } @else {
+              <span class="restore-fallback"></span>
+            }
+          </li>
+        }
+        @if (restoreMore() > 0) {
+          <li class="restore-more">+{{ restoreMore() }}</li>
+        }
+      </ul>
+      <div class="restore-actions">
+        <button
+          id="restore-session"
+          type="button"
+          class="button button--primary"
+          [disabled]="restoring()"
+          (click)="restoreSession()"
+        >
+          Restore session
+        </button>
+        <button
+          type="button"
+          class="button button--secondary"
+          [disabled]="restoring()"
+          (click)="startFresh()"
+        >
+          Start from scratch
+        </button>
+      </div>
+    </div>
+  </div>
+}
+<div class="editor" [attr.inert]="!sessionReady() || restoreOffer() ? '' : null">
   <app-edit-history-list
     (selected)="openPastEdit($event)"
     (currentSelected)="openCurrentEdit($event)"
@@ -43,7 +98,7 @@
         </span>
         <strong>{{ loadingCount() > 0 ? loadingLabel() : 'Choose a photo' }}</strong>
         <span id="current-photo-hint" class="photo-hint"
-          >JPEG, PNG, WebP, or HEIC. You can also drop files here.</span
+        >JPEG, PNG, WebP, or HEIC. You can also drop files here.</span
         >
       </button>
     }
@@ -202,7 +257,7 @@
           </span>
           <strong>{{ loadingCount() > 0 ? loadingLabel() : 'Choose a photo' }}</strong>
           <span id="photo-hint" class="photo-hint"
-            >JPEG, PNG, WebP, or HEIC. You can also drop files here.</span
+          >JPEG, PNG, WebP, or HEIC. You can also drop files here.</span
           >
         </button>
       }

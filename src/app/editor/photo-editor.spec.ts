@@ -14,6 +14,14 @@ import {
 } from './edit-history';
 import { HEIC_DECODER } from './heic-image';
 import { CurrentSession } from './current-session';
+import {
+  SESSION_HANDLE_DB,
+  SESSION_IMAGE_DB,
+  SESSION_LIST_DB,
+  type SessionEdit,
+  type SessionListDb,
+  type StoredSession,
+} from './current-session-store';
 import { PhotoEditor } from './photo-editor';
 import { heicWithExifDate, jpegWithExifDate } from './photo-exif-fixture';
 import { PHOTO_FILE_PICKER, type PhotoSelection } from './photo-file-picker';
@@ -26,6 +34,9 @@ describe('PhotoEditor', () => {
   let handles: MemoryHandles;
   let images: MemoryImages;
   let lists: MemoryEditList;
+  let sessionLists: MemorySessionList;
+  let sessionImages: MemoryImages;
+  let sessionHandles: MemoryHandles;
 
   beforeEach(async () => {
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:photo');
@@ -39,6 +50,9 @@ describe('PhotoEditor', () => {
     handles = new MemoryHandles();
     images = new MemoryImages();
     lists = new MemoryEditList();
+    sessionLists = new MemorySessionList();
+    sessionImages = new MemoryImages();
+    sessionHandles = new MemoryHandles();
 
     await TestBed.configureTestingModule({
       imports: [PhotoEditor],
@@ -48,6 +62,9 @@ describe('PhotoEditor', () => {
         { provide: EDIT_LIST_DB, useValue: lists },
         { provide: FILE_HANDLE_DB, useValue: handles },
         { provide: EDIT_IMAGE_DB, useValue: images },
+        { provide: SESSION_LIST_DB, useValue: sessionLists },
+        { provide: SESSION_IMAGE_DB, useValue: sessionImages },
+        { provide: SESSION_HANDLE_DB, useValue: sessionHandles },
       ],
     }).compileComponents();
 
@@ -386,10 +403,11 @@ describe('PhotoEditor', () => {
     await vi.waitFor(() => {
       expect(currentSession(fixture).edits()).toHaveLength(2);
     });
-    expect(currentSession(fixture).edits().map((edit) => edit.rightCaption)).toEqual([
-      'Pier light',
-      'Pier light',
-    ]);
+    expect(
+      currentSession(fixture)
+        .edits()
+        .map((edit) => edit.rightCaption),
+    ).toEqual(['Pier light', 'Pier light']);
 
     state(fixture).captionModel.set({ left: '2024-06-15', right: 'Night pier' });
     fixture.detectChanges();
@@ -488,10 +506,11 @@ describe('PhotoEditor', () => {
     await vi.waitFor(() => {
       expect(currentSession(fixture).edits()).toHaveLength(2);
     });
-    expect(currentSession(fixture).edits().map((edit) => edit.fileName)).toEqual([
-      'pier.png',
-      'harbor.jpg',
-    ]);
+    expect(
+      currentSession(fixture)
+        .edits()
+        .map((edit) => edit.fileName),
+    ).toEqual(['pier.png', 'harbor.jpg']);
     expect(currentSession(fixture).edits()[1]).toMatchObject({
       date: '2024-06-15',
       rightCaption: '',
@@ -525,10 +544,11 @@ describe('PhotoEditor', () => {
     FakeImage.held = [];
 
     await vi.waitFor(() => {
-      expect(currentSession(fixture).edits().map((edit) => edit.fileName)).toEqual([
-        'pier.png',
-        'harbor.png',
-      ]);
+      expect(
+        currentSession(fixture)
+          .edits()
+          .map((edit) => edit.fileName),
+      ).toEqual(['pier.png', 'harbor.png']);
     });
     fixture.detectChanges();
     expect(button(fixture, 'Current edits').getAttribute('aria-selected')).toBe('true');
@@ -545,10 +565,11 @@ describe('PhotoEditor', () => {
     input.dispatchEvent(new Event('change'));
 
     await vi.waitFor(() => {
-      expect(currentSession(fixture).edits().map((edit) => edit.fileName)).toEqual([
-        'pier.png',
-        'harbor.png',
-      ]);
+      expect(
+        currentSession(fixture)
+          .edits()
+          .map((edit) => edit.fileName),
+      ).toEqual(['pier.png', 'harbor.png']);
     });
   });
 
@@ -581,7 +602,7 @@ describe('PhotoEditor', () => {
       panX: 0.25,
       panY: 0.8,
       zoom: 2,
-      orientation: 'portrait',
+      orientation: null,
     });
     fixture.detectChanges();
 
@@ -762,6 +783,190 @@ describe('PhotoEditor', () => {
 
     expect(state(fixture).zoom()).toBe(1);
   });
+
+  it('stores the open photo for the next visit', async () => {
+    const file = new File(['photo'], 'dog.png', { type: 'image/png' });
+    const handle = fileHandle(file);
+    pickPhoto.mockResolvedValue([{ file, handle }]);
+
+    button(fixture, 'Choose a photo').click();
+
+    await vi.waitFor(() => {
+      expect(sessionLists.session.edits).toHaveLength(1);
+    });
+    expect(sessionLists.session.edits[0]).toMatchObject({
+      fileName: 'dog.png',
+      panX: 0.5,
+      panY: 0.5,
+      zoom: 1,
+      orientation: 'portrait',
+    });
+    expect(sessionImages.values.size).toBe(1);
+    expect([...sessionHandles.values.values()]).toEqual([handle]);
+  });
+
+  it('stores a caption when the page closes before the usual delay', async () => {
+    await loadPortrait(fixture);
+    await vi.waitFor(() => {
+      expect(sessionLists.session.edits).toHaveLength(1);
+    });
+
+    state(fixture).captionModel.set({ left: '2024-06-15', right: 'Pier' });
+    fixture.detectChanges();
+    window.dispatchEvent(new Event('pagehide'));
+
+    await vi.waitFor(() => {
+      expect(sessionLists.session.edits[0]).toMatchObject({
+        rightCaption: 'Pier',
+        date: '2024-06-15',
+      });
+    });
+  });
+
+  it('drops the stored session when the last current edit is removed', async () => {
+    await loadPortrait(fixture);
+    await vi.waitFor(() => {
+      expect(sessionLists.session.edits).toHaveLength(1);
+    });
+
+    button(fixture, 'Remove').click();
+
+    await vi.waitFor(() => {
+      expect(sessionLists.session.edits).toEqual([]);
+    });
+    expect(sessionImages.values.size).toBe(0);
+  });
+});
+
+describe('PhotoEditor stored session', () => {
+  let fixture: ComponentFixture<PhotoEditor>;
+  let sessionLists: MemorySessionList;
+  let sessionImages: MemoryImages;
+
+  beforeEach(async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:photo');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    vi.stubGlobal('Image', FakeImage);
+    decodeHeic.mockReset();
+    decodeHeic.mockRejectedValue(new Error('decode'));
+    pickPhoto.mockReset();
+    pickPhoto.mockResolvedValue('fallback');
+
+    sessionLists = new MemorySessionList();
+    sessionImages = new MemoryImages();
+    const night = savedEdit('night', 'night.png', 'Night');
+    const harbor = savedEdit('harbor', 'harbor.png', 'Pier');
+    sessionLists.session = { activeId: 'night', edits: [night, harbor] };
+    sessionImages.values.set('night', new Blob(['night'], { type: 'image/png' }));
+    sessionImages.values.set('harbor', new Blob(['harbor'], { type: 'image/png' }));
+
+    await TestBed.configureTestingModule({
+      imports: [PhotoEditor],
+      providers: [
+        { provide: HEIC_DECODER, useValue: decodeHeic },
+        { provide: PHOTO_FILE_PICKER, useValue: pickPhoto },
+        { provide: EDIT_LIST_DB, useValue: new MemoryEditList() },
+        { provide: FILE_HANDLE_DB, useValue: new MemoryHandles() },
+        { provide: EDIT_IMAGE_DB, useValue: new MemoryImages() },
+        { provide: SESSION_LIST_DB, useValue: sessionLists },
+        { provide: SESSION_IMAGE_DB, useValue: sessionImages },
+        { provide: SESSION_HANDLE_DB, useValue: new MemoryHandles() },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(PhotoEditor);
+    await fixture.whenStable();
+  });
+
+  afterEach(() => {
+    FakeImage.failNext = false;
+    FakeImage.hold = false;
+    FakeImage.held = [];
+    FakeImage.size = { width: 800, height: 1200 };
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('asks whether to restore the previous session', async () => {
+    await vi.waitFor(() => {
+      expect(text(fixture)).toContain('Restore previous session?');
+    });
+
+    const dialog = fixture.nativeElement.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(text(fixture)).toContain('You have 2 photos from your last visit.');
+    expect(text(fixture)).toContain('night.png');
+    expect(text(fixture)).toContain('harbor.png');
+    expect(fixture.nativeElement.querySelector('.editor')?.hasAttribute('inert')).toBe(true);
+    expect(document.activeElement).toBe(button(fixture, 'Restore session'));
+  });
+
+  it('restores the saved photos and opens the active one', async () => {
+    await vi.waitFor(() => {
+      expect(text(fixture)).toContain('Restore session');
+    });
+
+    button(fixture, 'Restore session').click();
+
+    await vi.waitFor(() => {
+      expect(text(fixture)).not.toContain('Restore previous session?');
+    });
+    expect(fixture.nativeElement.querySelector('.photo-name')?.textContent).toBe('night.png');
+    expect(
+      currentSession(fixture)
+        .edits()
+        .map((edit) => edit.fileName),
+    ).toEqual(['night.png', 'harbor.png']);
+    expect(currentSession(fixture).activeId()).toBe('night');
+    expect(state(fixture).orientation()).toBe('portrait');
+    expect(state(fixture).pan()).toEqual({ x: 0.25, y: 0.75 });
+    expect(state(fixture).zoom()).toBe(2);
+    const caption = fixture.nativeElement.querySelector('#rightCaption') as HTMLInputElement;
+    expect(caption.value).toBe('Night');
+  });
+
+  it('starts from scratch and stays empty on the next visit', async () => {
+    await vi.waitFor(() => {
+      expect(text(fixture)).toContain('Start from scratch');
+    });
+
+    button(fixture, 'Start from scratch').click();
+
+    await vi.waitFor(() => {
+      expect(sessionLists.session.edits).toEqual([]);
+    });
+    expect(sessionImages.values.size).toBe(0);
+    expect(text(fixture)).not.toContain('Restore previous session?');
+    expect(text(fixture)).toContain('Choose a photo');
+
+    fixture.destroy();
+    fixture = TestBed.createComponent(PhotoEditor);
+    await fixture.whenStable();
+
+    await vi.waitFor(() => {
+      expect(fixture.nativeElement.querySelector('.editor')?.hasAttribute('inert')).toBe(false);
+    });
+    expect(text(fixture)).toContain('Choose a photo');
+    expect(text(fixture)).not.toContain('Restore previous session?');
+  });
+
+  it('reports that a session without its photos cannot be restored', async () => {
+    sessionImages.values.clear();
+    fixture.destroy();
+    fixture = TestBed.createComponent(PhotoEditor);
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(text(fixture)).toContain('Restore session');
+    });
+
+    button(fixture, 'Restore session').click();
+
+    await vi.waitFor(() => {
+      expect(text(fixture)).toContain('The previous session could not be restored.');
+    });
+    expect(text(fixture)).not.toContain('Restore previous session?');
+    expect(sessionLists.session.edits).toEqual([]);
+  });
 });
 
 function currentSession(fixture: ComponentFixture<PhotoEditor>): CurrentSession {
@@ -880,6 +1085,35 @@ function fileHandle(file: File): StoredFileHandle {
     requestPermission: async () => 'granted',
     getFile: async () => file,
   };
+}
+
+function savedEdit(id: string, fileName: string, caption: string): SessionEdit {
+  return {
+    id,
+    fileName,
+    rightCaption: caption,
+    date: '2024-06-15',
+    thumbnail: new Blob(['thumb'], { type: 'image/jpeg' }),
+    panX: 0.25,
+    panY: 0.75,
+    zoom: 2,
+    orientation: 'portrait',
+  };
+}
+
+class MemorySessionList implements SessionListDb {
+  session: StoredSession = { activeId: null, edits: [] };
+
+  async read(): Promise<StoredSession> {
+    return this.session;
+  }
+
+  async write(session: StoredSession): Promise<void> {
+    this.session = {
+      activeId: session.activeId,
+      edits: session.edits.map((edit) => ({ ...edit })),
+    };
+  }
 }
 
 class MemoryEditList implements EditListDb {

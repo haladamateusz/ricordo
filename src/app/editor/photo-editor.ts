@@ -6,12 +6,14 @@ import {
   effect,
   ElementRef,
   inject,
+  PendingTasks,
   signal,
   viewChild,
 } from '@angular/core';
 import { disabled, form, FormField } from '@angular/forms/signals';
 
 import { CurrentSession, type CurrentEdit } from './current-session';
+import { CurrentSessionStore, type SessionEdit, type StoredSession } from './current-session-store';
 import { DatePicker, formatCaptionDate } from './date-picker';
 import { EditHistory, type StoredEdit, type StoredFileHandle } from './edit-history';
 import { EditHistoryList } from './edit-history-list';
@@ -39,6 +41,7 @@ interface LoadedPhoto {
   image: HTMLImageElement;
   fileName: string;
   objectUrl: string;
+  source: Blob;
   handle: StoredFileHandle | null;
 }
 
@@ -52,8 +55,18 @@ interface IncomingPhoto {
   image: HTMLImageElement;
   fileName: string;
   objectUrl: string;
+  source: Blob;
   handle: StoredFileHandle | null;
   date: string;
+}
+
+interface SessionPreview extends SessionEdit {
+  thumbnailUrl: string;
+}
+
+interface RestoreOffer {
+  activeId: string | null;
+  edits: SessionPreview[];
 }
 
 interface IncomingFailure {
@@ -89,6 +102,7 @@ const loadingRunnerLines = [{ phase: 0 }, { phase: 0.5 }];
 const KEY_NUDGE_PX = 20;
 const ZOOM_WHEEL_GAIN = 0.002;
 const currentEditSaveDelay = 1000;
+const restorePreviewLimit = 4;
 
 @Component({
   selector: 'app-photo-editor',
@@ -103,12 +117,15 @@ export class PhotoEditor {
   private readonly pickPhoto = inject(PHOTO_FILE_PICKER);
   private readonly history = inject(EditHistory);
   private readonly session = inject(CurrentSession);
+  private readonly sessionStore = inject(CurrentSessionStore);
+  private readonly pendingTasks = inject(PendingTasks);
   private committedKey = '';
   private replaceOnNextLoad = false;
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly canvas = viewChild<ElementRef<HTMLCanvasElement>>('preview');
   private readonly fileInput = viewChild<ElementRef<HTMLInputElement>>('fileInput');
   private readonly editList = viewChild(EditHistoryList);
+  private readonly restoreDialog = viewChild<ElementRef<HTMLElement>>('restoreDialog');
   private dragOrigin: { x: number; y: number; pan: Pan } | null = null;
   private loadId = 0;
   private runnerObserver: ResizeObserver | null = null;
@@ -132,6 +149,20 @@ export class PhotoEditor {
   });
 
   protected readonly hasCurrentEdits = computed(() => this.session.edits().length > 0);
+  protected readonly sessionReady = signal(false);
+  protected readonly restoring = signal(false);
+  protected readonly restoreOffer = signal<RestoreOffer | null>(null);
+  protected readonly restoreSummary = computed(() => {
+    const count = this.restoreOffer()?.edits.length ?? 0;
+    const photos = count === 1 ? '1 photo' : `${count} photos`;
+    return `You have ${photos} from your last visit.`;
+  });
+  protected readonly restorePreview = computed(
+    () => this.restoreOffer()?.edits.slice(0, restorePreviewLimit) ?? [],
+  );
+  protected readonly restoreMore = computed(() =>
+    Math.max(0, (this.restoreOffer()?.edits.length ?? 0) - restorePreviewLimit),
+  );
   private readonly loadingDone = signal(0);
   protected readonly loadingLabel = computed(() => {
     const total = this.loadingCount();
@@ -195,7 +226,12 @@ export class PhotoEditor {
       this.runnerObserver?.disconnect();
       this.session.release();
       this.revokePhoto();
+      this.releaseOffer();
+      window.removeEventListener('pagehide', this.onPageHide);
     });
+
+    window.addEventListener('pagehide', this.onPageHide);
+    this.pendingTasks.run(() => this.loadRestoreOffer());
 
     effect((onCleanup) => {
       const photo = this.photo();
@@ -209,6 +245,36 @@ export class PhotoEditor {
         this.saveActiveEdit();
       }, currentEditSaveDelay);
       onCleanup(() => clearTimeout(timer));
+    });
+
+    afterRenderEffect(() => {
+      const dialog = this.restoreDialog()?.nativeElement;
+      if (!this.restoreOffer() || !dialog) {
+        return;
+      }
+      dialog.querySelector<HTMLButtonElement>('#restore-session')?.focus();
+    });
+
+    afterRenderEffect((onCleanup) => {
+      if (!this.restoreOffer()) {
+        return;
+      }
+      const shell = this.host.nativeElement.parentElement;
+      if (!shell) {
+        return;
+      }
+      const hidden: HTMLElement[] = [];
+      for (const child of shell.children) {
+        if (child instanceof HTMLElement && child !== this.host.nativeElement && !child.inert) {
+          child.inert = true;
+          hidden.push(child);
+        }
+      }
+      onCleanup(() => {
+        for (const element of hidden) {
+          element.inert = false;
+        }
+      });
     });
 
     afterRenderEffect({
@@ -523,6 +589,7 @@ export class PhotoEditor {
       this.committedKey = this.draftKey();
       this.errorMessage.set('');
       this.pendingMessage.set('');
+      this.persistSession();
       return;
     }
 
@@ -604,6 +671,7 @@ export class PhotoEditor {
       image: edit.image,
       fileName: edit.fileName,
       objectUrl: edit.objectUrl,
+      source: edit.source,
       handle: edit.handle,
     });
     this.orientation.set(edit.orientation);
@@ -611,6 +679,7 @@ export class PhotoEditor {
     this.zoom.set(edit.zoom);
     this.captionModel.set({ left: edit.date, right: edit.rightCaption });
     this.committedKey = this.draftKey();
+    this.persistSession();
   }
 
   private async restoreEdit(edit: StoredEdit): Promise<void> {
@@ -764,6 +833,7 @@ export class PhotoEditor {
         image: display.image,
         fileName: file.name,
         objectUrl: display.objectUrl,
+        source: display.source,
         handle,
         date,
       };
@@ -788,6 +858,7 @@ export class PhotoEditor {
       image: draft.image,
       fileName: draft.fileName,
       objectUrl: draft.objectUrl,
+      source: draft.source,
       handle: draft.handle,
     });
     this.orientation.set(imageOrientation(draft.image));
@@ -841,6 +912,7 @@ export class PhotoEditor {
         image: display.image,
         fileName: file.name,
         objectUrl: display.objectUrl,
+        source: display.source,
         handle,
       });
       this.orientation.set(restored?.orientation ?? imageOrientation(display.image));
@@ -912,9 +984,11 @@ export class PhotoEditor {
       orientation,
       image: photo.image,
       objectUrl: photo.objectUrl,
+      source: photo.source,
       handle: photo.handle,
     });
     this.committedKey = this.draftKey();
+    this.persistSession([id]);
     void this.refreshThumbnail(id, pan.x, pan.y, zoom, orientation);
   }
 
@@ -939,6 +1013,7 @@ export class PhotoEditor {
       orientation,
       image: photo.image,
       objectUrl: photo.objectUrl,
+      source: photo.source,
       handle: photo.handle,
     });
     if (!replaced) {
@@ -946,6 +1021,7 @@ export class PhotoEditor {
     }
 
     this.committedKey = this.draftKey();
+    this.persistSession([id]);
     void this.refreshThumbnail(id, pan.x, pan.y, zoom, orientation);
     return true;
   }
@@ -970,6 +1046,7 @@ export class PhotoEditor {
       orientation,
     });
     this.committedKey = this.draftKey();
+    this.persistSession();
     void this.refreshThumbnail(id, pan.x, pan.y, zoom, orientation);
   }
 
@@ -999,7 +1076,8 @@ export class PhotoEditor {
       return;
     }
 
-    this.session.setThumbnail(id, URL.createObjectURL(blob));
+    this.session.setThumbnail(id, URL.createObjectURL(blob), blob);
+    this.persistSession();
   }
 
   private draftKey(): string {
@@ -1032,10 +1110,10 @@ export class PhotoEditor {
   private async openDisplayImage(
     file: File,
     onConvert: () => void,
-  ): Promise<{ image: HTMLImageElement; objectUrl: string }> {
+  ): Promise<{ image: HTMLImageElement; objectUrl: string; source: Blob }> {
     const objectUrl = URL.createObjectURL(file);
     try {
-      return { image: await loadImage(objectUrl), objectUrl };
+      return { image: await loadImage(objectUrl), objectUrl, source: file };
     } catch (error) {
       URL.revokeObjectURL(objectUrl);
       if (!isHeic(file)) {
@@ -1047,11 +1125,193 @@ export class PhotoEditor {
     const jpeg = await this.decodeHeic(file);
     const convertedUrl = URL.createObjectURL(jpeg);
     try {
-      return { image: await loadImage(convertedUrl), objectUrl: convertedUrl };
+      return { image: await loadImage(convertedUrl), objectUrl: convertedUrl, source: jpeg };
     } catch (error) {
       URL.revokeObjectURL(convertedUrl);
       throw error;
     }
+  }
+
+  private readonly onPageHide = (): void => {
+    if (!this.sessionReady() || this.restoreOffer()) {
+      return;
+    }
+    if (this.session.activeId() && this.photo()) {
+      this.saveActiveEdit();
+      return;
+    }
+    if (this.session.edits().length > 0) {
+      this.persistSession();
+    }
+  };
+
+  private async loadRestoreOffer(): Promise<void> {
+    try {
+      const stored = await this.sessionStore.read();
+      if (this.session.edits().length === 0 && stored.edits.length > 0) {
+        this.restoreOffer.set({
+          activeId: stored.activeId,
+          edits: stored.edits.map((edit) => ({
+            ...edit,
+            thumbnailUrl: edit.thumbnail.size > 0 ? URL.createObjectURL(edit.thumbnail) : '',
+          })),
+        });
+      }
+    } finally {
+      this.sessionReady.set(true);
+    }
+  }
+
+  protected startFresh(): void {
+    if (this.restoring()) {
+      return;
+    }
+    this.releaseOffer();
+    void this.sessionStore.clear().catch(() => undefined);
+  }
+
+  protected restoreSession(): void {
+    const offer = this.restoreOffer();
+    if (!offer || this.restoring()) {
+      return;
+    }
+    this.restoring.set(true);
+    void this.rebuildSession(offer);
+  }
+
+  protected onRestoreKey(event: KeyboardEvent): void {
+    if (event.key !== 'Tab') {
+      return;
+    }
+    const dialog = this.restoreDialog()?.nativeElement;
+    if (!dialog) {
+      return;
+    }
+    const buttons = [...dialog.querySelectorAll<HTMLButtonElement>('button')].filter(
+      (button) => !button.disabled,
+    );
+    const first = buttons[0];
+    const last = buttons[buttons.length - 1];
+    if (!first || !last) {
+      return;
+    }
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || !dialog.contains(active))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  private async rebuildSession(offer: RestoreOffer): Promise<void> {
+    const edits: CurrentEdit[] = [];
+    for (const record of offer.edits) {
+      const source = await this.sessionStore.image(record.id);
+      if (!source) {
+        if (record.thumbnailUrl) {
+          URL.revokeObjectURL(record.thumbnailUrl);
+        }
+        continue;
+      }
+
+      const objectUrl = URL.createObjectURL(source);
+      try {
+        const image = await loadImage(objectUrl);
+        edits.push({
+          id: record.id,
+          fileName: record.fileName,
+          rightCaption: record.rightCaption,
+          date: record.date,
+          panX: record.panX,
+          panY: record.panY,
+          zoom: record.zoom,
+          orientation: record.orientation,
+          thumbnailUrl: record.thumbnailUrl,
+          thumbnail: record.thumbnail,
+          image,
+          objectUrl,
+          source,
+          handle: (await this.sessionStore.handle(record.id)) ?? null,
+        });
+      } catch {
+        URL.revokeObjectURL(objectUrl);
+        if (record.thumbnailUrl) {
+          URL.revokeObjectURL(record.thumbnailUrl);
+        }
+      }
+    }
+
+    this.restoreOffer.set(null);
+    this.restoring.set(false);
+    if (edits.length === 0) {
+      this.errorMessage.set('The previous session could not be restored.');
+      await this.sessionStore.clear().catch(() => undefined);
+      return;
+    }
+
+    const activeId = edits.some((edit) => edit.id === offer.activeId)
+      ? offer.activeId
+      : edits[0].id;
+    this.session.adopt(edits, activeId);
+    const active = activeId ? this.session.find(activeId) : undefined;
+    if (active) {
+      this.openCurrentEdit(active);
+    }
+    for (const edit of edits) {
+      void this.refreshThumbnail(edit.id, edit.panX, edit.panY, edit.zoom, edit.orientation);
+    }
+    this.editList()?.showCurrent();
+  }
+
+  private releaseOffer(): void {
+    const offer = this.restoreOffer();
+    if (!offer) {
+      return;
+    }
+    for (const edit of offer.edits) {
+      if (edit.thumbnailUrl) {
+        URL.revokeObjectURL(edit.thumbnailUrl);
+      }
+    }
+    this.restoreOffer.set(null);
+  }
+
+  private persistSession(imageIds: readonly string[] = []): void {
+    if (!this.sessionReady() || this.restoreOffer()) {
+      return;
+    }
+
+    const edits = this.session.edits();
+    const images = new Map<string, Blob>();
+    const handles = new Map<string, StoredFileHandle | null>();
+    for (const id of imageIds) {
+      const edit = edits.find((item) => item.id === id);
+      if (!edit || edit.source.size === 0) {
+        continue;
+      }
+      images.set(id, edit.source);
+      handles.set(id, edit.handle);
+    }
+
+    const session: StoredSession = {
+      activeId: edits.some((edit) => edit.id === this.session.activeId())
+        ? this.session.activeId()
+        : (edits[0]?.id ?? null),
+      edits: edits.map((edit) => ({
+        id: edit.id,
+        fileName: edit.fileName,
+        rightCaption: edit.rightCaption,
+        date: edit.date,
+        thumbnail: edit.thumbnail,
+        panX: edit.panX,
+        panY: edit.panY,
+        zoom: edit.zoom,
+        orientation: edit.orientation,
+      })),
+    };
+    void this.sessionStore.write(session, { images, handles }).catch(() => undefined);
   }
 
   private revokePhoto(): void {

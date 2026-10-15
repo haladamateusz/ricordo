@@ -78,7 +78,12 @@ const handleStoreName = 'file-handles';
 const imageStoreName = 'edit-images';
 const listStoreName = 'edits';
 const listKey = 'list';
-const databaseVersion = 3;
+const databaseVersion = 4;
+
+export const sessionListStoreName = 'session';
+export const sessionImageStoreName = 'session-images';
+export const sessionHandleStoreName = 'session-handles';
+export const sessionListKey = 'current';
 
 export const EDIT_LIST_DB = new InjectionToken<EditListDb>('EDIT_LIST_DB', {
   providedIn: 'root',
@@ -407,7 +412,7 @@ class IndexedDbEditImages implements EditImageDb {
 
 let photoDatabase: Promise<IDBDatabase> | null = null;
 
-function openPhotoDatabase(): Promise<IDBDatabase> {
+export function openPhotoDatabase(): Promise<IDBDatabase> {
   photoDatabase ??= new Promise((resolve, reject) => {
     const request = indexedDB.open(handleDbName, databaseVersion);
     request.onupgradeneeded = () => {
@@ -420,6 +425,15 @@ function openPhotoDatabase(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(listStoreName)) {
         db.createObjectStore(listStoreName);
+      }
+      if (!db.objectStoreNames.contains(sessionListStoreName)) {
+        db.createObjectStore(sessionListStoreName);
+      }
+      if (!db.objectStoreNames.contains(sessionImageStoreName)) {
+        db.createObjectStore(sessionImageStoreName);
+      }
+      if (!db.objectStoreNames.contains(sessionHandleStoreName)) {
+        db.createObjectStore(sessionHandleStoreName);
       }
     };
     request.onsuccess = () => resolve(request.result);

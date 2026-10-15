@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 
-import { CurrentSession, type CurrentDraft } from './current-session';
+import { CurrentSession, type CurrentDraft, type CurrentEdit } from './current-session';
 
 describe('CurrentSession', () => {
   let session: CurrentSession;
@@ -98,6 +98,22 @@ describe('CurrentSession', () => {
     expect(session.edits().map((edit) => edit.fileName)).toEqual(['harbor.png']);
   });
 
+  it('replaces the open edits with a saved session', () => {
+    session.begin(draft('harbor.png', 'Pier'));
+    const saved: CurrentEdit = {
+      ...draft('night.png', 'Night'),
+      id: 'saved',
+      thumbnailUrl: '',
+      thumbnail: new Blob(),
+      rightCaption: 'Night',
+    };
+
+    session.adopt([saved], 'saved');
+
+    expect(session.edits()).toEqual([saved]);
+    expect(session.activeId()).toBe('saved');
+  });
+
   it('clears the session when the last edit is removed', () => {
     const only = session.begin(draft('harbor.png', 'Pier'));
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
@@ -118,6 +134,7 @@ describe('CurrentSession', () => {
       orientation: 'landscape',
       image: new Image(),
       objectUrl: `blob:${fileName}`,
+      source: new Blob(),
       handle: null,
     };
   }

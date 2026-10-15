@@ -13,8 +13,10 @@ export interface CurrentEdit {
   zoom: number;
   orientation: Orientation;
   thumbnailUrl: string;
+  thumbnail: Blob;
   image: HTMLImageElement;
   objectUrl: string;
+  source: Blob;
   handle: StoredFileHandle | null;
 }
 
@@ -28,6 +30,7 @@ export interface CurrentDraft {
   orientation: Orientation;
   image: HTMLImageElement;
   objectUrl: string;
+  source: Blob;
   handle: StoredFileHandle | null;
 }
 
@@ -50,10 +53,33 @@ export class CurrentSession {
 
   begin(draft: CurrentDraft): string {
     const id = crypto.randomUUID();
-    const edit: CurrentEdit = { id, thumbnailUrl: '', ...draft };
+    const edit: CurrentEdit = { id, thumbnailUrl: '', thumbnail: new Blob(), ...draft };
     this.editsState.update((edits) => [edit, ...edits]);
     this.activeIdState.set(id);
     return id;
+  }
+
+  adopt(edits: readonly CurrentEdit[], activeId: string | null): void {
+    const kept = new Set<string>();
+    for (const edit of edits) {
+      kept.add(edit.objectUrl);
+      if (edit.thumbnailUrl) {
+        kept.add(edit.thumbnailUrl);
+      }
+    }
+    for (const edit of this.editsState()) {
+      if (edit.thumbnailUrl && !kept.has(edit.thumbnailUrl)) {
+        URL.revokeObjectURL(edit.thumbnailUrl);
+      }
+      if (!kept.has(edit.objectUrl)) {
+        URL.revokeObjectURL(edit.objectUrl);
+      }
+    }
+
+    this.editsState.set(edits);
+    this.activeIdState.set(
+      edits.some((edit) => edit.id === activeId) ? activeId : (edits[0]?.id ?? null),
+    );
   }
 
   activate(id: string): void {
@@ -103,7 +129,9 @@ export class CurrentSession {
     const previousUrl = current.objectUrl;
     const previousThumb = current.thumbnailUrl;
     this.editsState.update((edits) =>
-      edits.map((edit) => (edit.id === id ? { ...edit, ...draft, id, thumbnailUrl: '' } : edit)),
+      edits.map((edit) =>
+        edit.id === id ? { ...edit, ...draft, id, thumbnailUrl: '', thumbnail: new Blob() } : edit,
+      ),
     );
     if (previousThumb) {
       URL.revokeObjectURL(previousThumb);
@@ -114,13 +142,13 @@ export class CurrentSession {
     return true;
   }
 
-  setThumbnail(id: string, thumbnailUrl: string): void {
+  setThumbnail(id: string, thumbnailUrl: string, thumbnail: Blob): void {
     const previous = this.find(id)?.thumbnailUrl;
     if (previous && previous !== thumbnailUrl) {
       URL.revokeObjectURL(previous);
     }
     this.editsState.update((edits) =>
-      edits.map((edit) => (edit.id === id ? { ...edit, thumbnailUrl } : edit)),
+      edits.map((edit) => (edit.id === id ? { ...edit, thumbnailUrl, thumbnail } : edit)),
     );
   }
 
