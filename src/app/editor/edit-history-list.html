@@ -57,7 +57,7 @@
       animate.leave="panel-leave-start"
     >
     @if (history.loaded() && history.edits().length === 0) {
-      <p class="history-empty">No edits yet</p>
+      <p class="history-empty">No saved edits yet</p>
     } @else if (history.edits().length > 0) {
       <div #historyScroll class="history-scroll">
         <div class="history-window" role="list" [style.height.px]="historyVirtualizer.getTotalSize()">

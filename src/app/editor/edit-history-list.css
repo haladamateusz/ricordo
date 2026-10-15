@@ -193,6 +193,7 @@
   padding: 1rem 0.85rem;
   color: color-mix(in srgb, var(--text) 55%, transparent);
   font-size: 0.8125rem;
+  text-align: center;
 }
 
 .history-scroll {

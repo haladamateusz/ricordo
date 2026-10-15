@@ -31,7 +31,7 @@ describe('EditHistoryList', () => {
     const fixture = await create();
 
     await vi.waitFor(() => {
-      expect(text(fixture)).toContain('No edits yet');
+      expect(text(fixture)).toContain('No saved edits yet');
     });
     expect(fixture.nativeElement.querySelector('.history-caption')).toBeNull();
   });
@@ -109,6 +109,7 @@ describe('EditHistoryList', () => {
       orientation: 'landscape',
       image: new Image(),
       objectUrl: 'blob:harbor',
+      source: new Blob(),
       handle: null,
     });
     fixture.detectChanges();
@@ -172,6 +173,7 @@ describe('EditHistoryList', () => {
       orientation: 'landscape',
       image: new Image(),
       objectUrl: 'blob:harbor',
+      source: new Blob(),
       handle: null,
     });
     const drawer = fixture.debugElement.injector.get(EditDrawer);
