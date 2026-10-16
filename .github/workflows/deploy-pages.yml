@@ -1,9 +1,7 @@
 name: Deploy GitHub Pages
 
 on:
-  workflow_run:
-    workflows: ["App checks"]
-    types: [completed]
+  push:
     branches: [main]
   workflow_dispatch:
 
@@ -19,30 +17,16 @@ concurrency:
 jobs:
   checks:
     name: App checks
-    if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/app-checks.yml
 
   build:
     name: Build
     needs: checks
-    if: >-
-      always() &&
-      (needs.checks.result == 'success' || needs.checks.result == 'skipped') &&
-      (
-        github.event_name == 'workflow_dispatch' ||
-        (
-          github.event.workflow_run.conclusion == 'success' &&
-          github.event.workflow_run.event == 'push' &&
-          github.event.workflow_run.head_branch == 'main'
-        )
-      )
     runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup Node
         uses: actions/setup-node@v5
