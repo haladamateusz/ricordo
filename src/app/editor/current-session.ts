@@ -1,5 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 
+import { captionDateTime } from './date-picker';
 import type { StoredFileHandle } from './edit-history';
 import type { Orientation } from './frame-layout';
 
@@ -127,6 +128,21 @@ export class CurrentSession {
     return true;
   }
 
+  sortByDate(): boolean {
+    const edits = this.editsState();
+    if (edits.length < 2) {
+      return false;
+    }
+
+    const next = [...edits].sort((left, right) => compareByDate(left.date, right.date));
+    if (next.every((edit, index) => edit === edits[index])) {
+      return false;
+    }
+
+    this.editsState.set(next);
+    return true;
+  }
+
   discard(id: string): CurrentEdit | null {
     const edits = this.editsState();
     const index = edits.findIndex((edit) => edit.id === id);
@@ -209,4 +225,19 @@ export class CurrentSession {
     this.editsState.set([]);
     this.activeIdState.set(null);
   }
+}
+
+function compareByDate(left: string, right: string): number {
+  const leftTime = captionDateTime(left);
+  const rightTime = captionDateTime(right);
+  if (leftTime === rightTime) {
+    return 0;
+  }
+  if (leftTime === null) {
+    return -1;
+  }
+  if (rightTime === null) {
+    return 1;
+  }
+  return leftTime - rightTime;
 }

@@ -72,6 +72,7 @@ describe('EditHistoryList', () => {
     await vi.waitFor(() => {
       expect(fixture.nativeElement.querySelector('.history-caption')).toBeNull();
       expect(text(fixture)).toContain('No current edits');
+      expect(text(fixture)).not.toContain('Oldest first');
     });
     expect(tab(fixture, 'Current edits').getAttribute('aria-selected')).toBe('true');
 
@@ -94,6 +95,47 @@ describe('EditHistoryList', () => {
       expect(text(fixture)).toContain('No current edits');
       expect(text(fixture)).not.toContain('No edits yet');
     });
+  });
+
+  it('sorts current edits from oldest to newest with undated edits first', async () => {
+    const fixture = await create();
+    const session = fixture.debugElement.injector.get(CurrentSession);
+    const saved: string[] = [];
+    session.begin({ ...currentDraft('newest.png', 'Newest'), date: '2024-12-01' });
+    session.begin({ ...currentDraft('blank.png', 'Blank'), date: '' });
+    session.begin({ ...currentDraft('oldest.png', 'Oldest'), date: '2024-01-03' });
+    fixture.componentInstance.reordered.subscribe(() => saved.push('saved'));
+    fixture.detectChanges();
+    tab(fixture, 'Current edits').click();
+
+    await vi.waitFor(() => {
+      expect(button(fixture, 'Oldest first')).toBeTruthy();
+    });
+    button(fixture, 'Oldest first').click();
+    fixture.detectChanges();
+
+    expect(session.edits().map((edit) => edit.fileName)).toEqual([
+      'blank.png',
+      'oldest.png',
+      'newest.png',
+    ]);
+    expect(fixture.nativeElement.querySelector('.reorder-status')?.textContent).toBe(
+      'Current edits sorted from oldest to newest.',
+    );
+    expect(saved).toEqual(['saved']);
+
+    button(fixture, 'Oldest first').click();
+    fixture.detectChanges();
+
+    expect(session.edits().map((edit) => edit.fileName)).toEqual([
+      'blank.png',
+      'oldest.png',
+      'newest.png',
+    ]);
+    expect(fixture.nativeElement.querySelector('.reorder-status')?.textContent).toBe(
+      'Current edits are already oldest first.',
+    );
+    expect(saved).toEqual(['saved']);
   });
 
   it('shows each opened photo on the Current edits tab', async () => {
@@ -630,6 +672,16 @@ class MemoryHandles implements FileHandleDb {
 
 function text(fixture: ComponentFixture<EditHistoryList>): string {
   return (fixture.nativeElement as HTMLElement).textContent ?? '';
+}
+
+function button(fixture: ComponentFixture<EditHistoryList>, name: string): HTMLButtonElement {
+  const match = [...fixture.nativeElement.querySelectorAll('button')].find(
+    (candidate) => candidate.textContent?.trim() === name,
+  );
+  if (!(match instanceof HTMLButtonElement)) {
+    throw new Error(`Missing button ${name}`);
+  }
+  return match;
 }
 
 function tab(fixture: ComponentFixture<EditHistoryList>, name: string): HTMLButtonElement {

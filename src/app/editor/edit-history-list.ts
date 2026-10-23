@@ -153,6 +153,22 @@ export class EditHistoryList {
     this.tabButtons()[nextIndex]?.nativeElement.focus();
   }
 
+  protected sortOldest(): void {
+    const scroll = this.currentScroll()?.nativeElement;
+    const changed = this.session.sortByDate();
+    if (scroll && changed) {
+      scroll.scrollTop = 0;
+    }
+    this.reorderStatus.set(
+      changed
+        ? 'Current edits sorted from oldest to newest.'
+        : 'Current edits are already oldest first.',
+    );
+    if (changed) {
+      this.reordered.emit();
+    }
+  }
+
   protected choose(edit: StoredEdit): void {
     this.selected.emit(edit);
     this.drawer.close();

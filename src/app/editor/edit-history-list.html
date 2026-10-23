@@ -115,6 +115,9 @@
         @if (session.edits().length === 0) {
           <p class="history-empty">No current edits</p>
         } @else {
+          <div class="current-toolbar">
+            <button type="button" class="sort-oldest" (click)="sortOldest()">Oldest first</button>
+          </div>
           <div #currentScroll class="history-scroll" [class.is-reordering]="draggingId()">
             <p class="reorder-status" aria-live="polite">{{ reorderStatus() }}</p>
             <div

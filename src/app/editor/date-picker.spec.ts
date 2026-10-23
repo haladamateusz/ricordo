@@ -1,6 +1,12 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { DatePicker, formatCaptionDate, selectableYearCount, toLocalIsoDate } from './date-picker';
+import {
+  DatePicker,
+  captionDateTime,
+  formatCaptionDate,
+  selectableYearCount,
+  toLocalIsoDate,
+} from './date-picker';
 
 describe('formatCaptionDate', () => {
   it('prints a selected date in Polish', () => {
@@ -12,6 +18,14 @@ describe('formatCaptionDate', () => {
   it('prints nothing when no date is selected', () => {
     expect(formatCaptionDate('')).toBe('');
     expect(formatCaptionDate('2026-02-31')).toBe('');
+  });
+});
+
+describe('captionDateTime', () => {
+  it('orders a real date and treats a missing date as unset', () => {
+    expect(captionDateTime('2024-06-15')).toBe(new Date(2024, 5, 15).getTime());
+    expect(captionDateTime('')).toBeNull();
+    expect(captionDateTime('2026-02-31')).toBeNull();
   });
 });
 

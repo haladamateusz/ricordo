@@ -50,6 +50,10 @@ export function formatCaptionDate(value: string): string {
   return captionDateFormat.format(date);
 }
 
+export function captionDateTime(value: string): number | null {
+  return parseLocalDateValue(value)?.getTime() ?? null;
+}
+
 export const longestCaptionDate = formatCaptionDate('2025-10-31');
 
 function parseLocalDateValue(value: string): Date | null {

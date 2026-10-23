@@ -70,6 +70,33 @@ describe('CurrentSession', () => {
     expect(session.find(first)?.fileName).toBe('harbor.png');
   });
 
+  it('sorts edits from oldest to newest and keeps undated edits first', () => {
+    expect(session.sortByDate()).toBe(false);
+    session.begin(draft('only.png', 'Only'));
+    expect(session.sortByDate()).toBe(false);
+    session.release();
+
+    const newest = session.begin({ ...draft('newest.png', 'Newest'), date: '2024-12-01' });
+    const blank = session.begin({ ...draft('blank.png', 'Blank'), date: '' });
+    const oldest = session.begin({ ...draft('oldest.png', 'Oldest'), date: '2024-01-03' });
+    const juneLater = session.begin({ ...draft('later.png', 'Later'), date: '2024-06-15' });
+    const juneEarlier = session.begin({ ...draft('earlier.png', 'Earlier'), date: '2024-06-15' });
+    const invalid = session.begin({ ...draft('invalid.png', 'Invalid'), date: '2026-02-31' });
+
+    expect(session.sortByDate()).toBe(true);
+
+    expect(session.edits().map((edit) => edit.id)).toEqual([
+      invalid,
+      blank,
+      oldest,
+      juneEarlier,
+      juneLater,
+      newest,
+    ]);
+    expect(session.activeId()).toBe(invalid);
+    expect(session.sortByDate()).toBe(false);
+  });
+
   it('moves one edit to a new place and leaves the open edit active', () => {
     const first = session.begin(draft('harbor.png', 'Pier'));
     const second = session.begin(draft('cafe.png', 'Cafe'));
