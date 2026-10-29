@@ -54,16 +54,27 @@ export function captionDateTime(value: string): number | null {
   return parseLocalDateValue(value)?.getTime() ?? null;
 }
 
+export function keepCaptionTime(nextDate: string, current: string): string {
+  const time = captionClock(current);
+  return time ? `${nextDate}T${time}` : nextDate;
+}
+
 export const longestCaptionDate = formatCaptionDate('2025-10-31');
 
 function parseLocalDateValue(value: string): Date | null {
-  const [year, month, day] = value.split('-').map(Number);
-
-  if (!year || !month || !day) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}):(\d{2}))?$/.exec(value.trim());
+  if (!match) {
     return null;
   }
 
-  const date = new Date(year, month - 1, day);
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const clock = captionClock(value);
+  const hours = clock ? Number(match[4]) : 0;
+  const minutes = clock ? Number(match[5]) : 0;
+  const seconds = clock ? Number(match[6]) : 0;
+  const date = new Date(year, month - 1, day, hours, minutes, seconds);
 
   if (
     Number.isNaN(date.getTime()) ||
@@ -75,6 +86,22 @@ function parseLocalDateValue(value: string): Date | null {
   }
 
   return date;
+}
+
+function captionClock(value: string): string | null {
+  const match = /^\d{4}-\d{2}-\d{2}[T ](\d{2}):(\d{2}):(\d{2})$/.exec(value.trim());
+  if (!match) {
+    return null;
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const seconds = Number(match[3]);
+  if (hours > 23 || minutes > 59 || seconds > 59) {
+    return null;
+  }
+
+  return `${match[1]}:${match[2]}:${match[3]}`;
 }
 
 @Component({
@@ -114,6 +141,10 @@ export class DatePicker implements FormValueControl<string> {
   protected readonly displayValue = computed(
     () => formatCaptionDate(this.value()) || this.placeholder(),
   );
+  protected readonly calendarDate = computed(() => {
+    const date = parseLocalDateValue(this.value());
+    return date ? toLocalIsoDate(date) : '';
+  });
 
   constructor() {
     effect(() => {
@@ -163,7 +194,7 @@ export class DatePicker implements FormValueControl<string> {
       return;
     }
 
-    this.value.set(nextValue);
+    this.value.set(keepCaptionTime(nextValue, this.value()));
     this.touch.emit();
     this.close();
     this.focus();

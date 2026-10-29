@@ -28,7 +28,7 @@
     @if (isCalendarReady()) {
       <calendar-date
         #calendar
-        [value]="value()"
+        [value]="calendarDate()"
         [min]="earliestDate"
         [max]="maxDate()"
         locale="pl"

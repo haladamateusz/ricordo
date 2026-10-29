@@ -70,7 +70,7 @@ describe('CurrentSession', () => {
     expect(session.find(first)?.fileName).toBe('harbor.png');
   });
 
-  it('sorts edits from oldest to newest and keeps undated edits first', () => {
+  it('sorts edits from oldest to newest, by time of day, and keeps undated edits first', () => {
     expect(session.sortByDate()).toBe(false);
     session.begin(draft('only.png', 'Only'));
     expect(session.sortByDate()).toBe(false);
@@ -79,8 +79,15 @@ describe('CurrentSession', () => {
     const newest = session.begin({ ...draft('newest.png', 'Newest'), date: '2024-12-01' });
     const blank = session.begin({ ...draft('blank.png', 'Blank'), date: '' });
     const oldest = session.begin({ ...draft('oldest.png', 'Oldest'), date: '2024-01-03' });
-    const juneLater = session.begin({ ...draft('later.png', 'Later'), date: '2024-06-15' });
-    const juneEarlier = session.begin({ ...draft('earlier.png', 'Earlier'), date: '2024-06-15' });
+    const juneUntimed = session.begin({ ...draft('day.png', 'Day'), date: '2024-06-15' });
+    const juneMorning = session.begin({
+      ...draft('morning.png', 'Morning'),
+      date: '2024-06-15T09:15:00',
+    });
+    const juneEvening = session.begin({
+      ...draft('evening.png', 'Evening'),
+      date: '2024-06-15T18:04:00',
+    });
     const invalid = session.begin({ ...draft('invalid.png', 'Invalid'), date: '2026-02-31' });
 
     expect(session.sortByDate()).toBe(true);
@@ -89,8 +96,9 @@ describe('CurrentSession', () => {
       invalid,
       blank,
       oldest,
-      juneEarlier,
-      juneLater,
+      juneUntimed,
+      juneMorning,
+      juneEvening,
       newest,
     ]);
     expect(session.activeId()).toBe(invalid);

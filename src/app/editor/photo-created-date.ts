@@ -77,7 +77,7 @@ function isoDateFromExif(value: unknown): string | null {
     return null;
   }
 
-  const match = /^(\d{4})[:-](\d{2})[:-](\d{2})/.exec(value.trim());
+  const match = /^(\d{4})[:-](\d{2})[:-](\d{2})(?:[ T](\d{2}):(\d{2}):(\d{2}))?/.exec(value.trim());
   const yearText = match?.[1];
   const monthText = match?.[2];
   const dayText = match?.[3];
@@ -98,5 +98,22 @@ function isoDateFromExif(value: unknown): string | null {
     return null;
   }
 
-  return `${yearText}-${monthText}-${dayText}`;
+  const dateText = `${yearText}-${monthText}-${dayText}`;
+  const time = clockTime(match?.[4], match?.[5], match?.[6]);
+  return time ? `${dateText}T${time}` : dateText;
+}
+
+function clockTime(hoursText?: string, minutesText?: string, secondsText?: string): string | null {
+  if (!hoursText || !minutesText || !secondsText) {
+    return null;
+  }
+
+  const hours = Number(hoursText);
+  const minutes = Number(minutesText);
+  const seconds = Number(secondsText);
+  if (hours > 23 || minutes > 59 || seconds > 59) {
+    return null;
+  }
+
+  return `${hoursText}:${minutesText}:${secondsText}`;
 }

@@ -97,13 +97,15 @@ describe('EditHistoryList', () => {
     });
   });
 
-  it('sorts current edits from oldest to newest with undated edits first', async () => {
+  it('sorts current edits from oldest to newest, by time of day, with undated edits first', async () => {
     const fixture = await create();
     const session = fixture.debugElement.injector.get(CurrentSession);
     const saved: string[] = [];
     session.begin({ ...currentDraft('newest.png', 'Newest'), date: '2024-12-01' });
     session.begin({ ...currentDraft('blank.png', 'Blank'), date: '' });
     session.begin({ ...currentDraft('oldest.png', 'Oldest'), date: '2024-01-03' });
+    session.begin({ ...currentDraft('morning.png', 'Morning'), date: '2024-06-15T09:15:00' });
+    session.begin({ ...currentDraft('evening.png', 'Evening'), date: '2024-06-15T18:04:00' });
     fixture.componentInstance.reordered.subscribe(() => saved.push('saved'));
     fixture.detectChanges();
     tab(fixture, 'Current edits').click();
@@ -117,6 +119,8 @@ describe('EditHistoryList', () => {
     expect(session.edits().map((edit) => edit.fileName)).toEqual([
       'blank.png',
       'oldest.png',
+      'morning.png',
+      'evening.png',
       'newest.png',
     ]);
     expect(fixture.nativeElement.querySelector('.reorder-status')?.textContent).toBe(
@@ -130,6 +134,8 @@ describe('EditHistoryList', () => {
     expect(session.edits().map((edit) => edit.fileName)).toEqual([
       'blank.png',
       'oldest.png',
+      'morning.png',
+      'evening.png',
       'newest.png',
     ]);
     expect(fixture.nativeElement.querySelector('.reorder-status')?.textContent).toBe(

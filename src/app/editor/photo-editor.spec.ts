@@ -488,7 +488,7 @@ describe('PhotoEditor', () => {
     expect(text(fixture)).not.toContain('12 września 2026');
     expect(currentSession(fixture).edits()[0]).toMatchObject({
       fileName: 'pier.jpg',
-      date: '2023-01-02',
+      date: '2023-01-02T08:00:00',
       rightCaption: '',
     });
   });
@@ -512,7 +512,7 @@ describe('PhotoEditor', () => {
         .map((edit) => edit.fileName),
     ).toEqual(['pier.png', 'harbor.jpg']);
     expect(currentSession(fixture).edits()[1]).toMatchObject({
-      date: '2024-06-15',
+      date: '2024-06-15T10:30:00',
       rightCaption: '',
     });
     expect(currentSession(fixture).edits()[0]).toMatchObject({ date: '', rightCaption: '' });

@@ -4,6 +4,7 @@ import {
   DatePicker,
   captionDateTime,
   formatCaptionDate,
+  keepCaptionTime,
   selectableYearCount,
   toLocalIsoDate,
 } from './date-picker';
@@ -19,13 +20,29 @@ describe('formatCaptionDate', () => {
     expect(formatCaptionDate('')).toBe('');
     expect(formatCaptionDate('2026-02-31')).toBe('');
   });
+
+  it('prints a capture time as its calendar day', () => {
+    expect(formatCaptionDate('2024-06-15T10:30:00')).toBe('15 czerwca 2024');
+  });
 });
 
 describe('captionDateTime', () => {
   it('orders a real date and treats a missing date as unset', () => {
     expect(captionDateTime('2024-06-15')).toBe(new Date(2024, 5, 15).getTime());
+    expect(captionDateTime('2024-06-15T10:30:00')).toBe(new Date(2024, 5, 15, 10, 30, 0).getTime());
+    expect(captionDateTime('2024-06-15T18:04:00')).toBeGreaterThan(
+      captionDateTime('2024-06-15T10:30:00') ?? 0,
+    );
     expect(captionDateTime('')).toBeNull();
     expect(captionDateTime('2026-02-31')).toBeNull();
+    expect(captionDateTime('2024-06-15T25:00:00')).toBe(new Date(2024, 5, 15).getTime());
+  });
+});
+
+describe('keepCaptionTime', () => {
+  it('keeps the clock time when the calendar day changes', () => {
+    expect(keepCaptionTime('2024-06-16', '2024-06-15T10:30:00')).toBe('2024-06-16T10:30:00');
+    expect(keepCaptionTime('2024-06-16', '2024-06-15')).toBe('2024-06-16');
   });
 });
 
