@@ -4,6 +4,7 @@ import {
   DestroyRef,
   ElementRef,
   inject,
+  input,
   output,
   signal,
   untracked,
@@ -47,6 +48,9 @@ export class EditHistoryList {
   readonly selected = output<StoredEdit>();
   readonly currentSelected = output<CurrentEdit>();
   readonly reordered = output<void>();
+  readonly downloadAll = output<void>();
+  readonly preparingDownloads = input(false);
+  readonly downloadNotice = input('');
 
   protected readonly tab = signal<'history' | 'current'>('history');
   protected readonly switching = signal(false);

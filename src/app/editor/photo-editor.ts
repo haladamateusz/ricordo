@@ -16,6 +16,7 @@ import { CurrentSession, type CurrentEdit } from './current-session';
 import { CurrentSessionStore, type SessionEdit, type StoredSession } from './current-session-store';
 import { DatePicker, formatCaptionDate } from './date-picker';
 import { EditHistory, type StoredEdit, type StoredFileHandle } from './edit-history';
+import { framedDownloadName, renderFramedPng } from './framed-export';
 import { EditHistoryList } from './edit-history-list';
 import { HEIC_DECODER } from './heic-image';
 import { isAcceptedPhoto, isHeic, readCreatedDate } from './photo-created-date';
@@ -36,6 +37,7 @@ import {
   type Orientation,
 } from './frame-layout';
 import { paintFrame } from './frame-renderer';
+import { zipStored } from './zip-store';
 
 interface LoadedPhoto {
   image: HTMLImageElement;
@@ -82,6 +84,18 @@ interface RestoredEdit {
   panY: number;
   zoom: number;
   orientation: Orientation | null;
+}
+
+interface FramedExport {
+  fileName: string;
+  rightCaption: string;
+  date: string;
+  panX: number;
+  panY: number;
+  zoom: number;
+  orientation: Orientation;
+  image: HTMLImageElement;
+  handle: StoredFileHandle | null;
 }
 
 interface LoadingRunner {
@@ -140,6 +154,8 @@ export class PhotoEditor {
   protected readonly currentDragOver = signal(false);
   protected readonly errorMessage = signal('');
   protected readonly pendingMessage = signal('');
+  protected readonly preparingDownloads = signal(false);
+  protected readonly downloadNotice = signal('');
   protected readonly loadingCount = signal(0);
   private batchId = 0;
   protected readonly fontReady = signal(false);
@@ -666,6 +682,10 @@ export class PhotoEditor {
     saveHistory();
   }
 
+  protected downloadAll(): void {
+    void this.exportAll();
+  }
+
   protected openPastEdit(edit: StoredEdit): void {
     void this.restoreEdit(edit);
   }
@@ -1143,6 +1163,109 @@ export class PhotoEditor {
     }
   }
 
+  private async exportAll(): Promise<void> {
+    if (this.preparingDownloads()) {
+      return;
+    }
+    const edits = this.exportEdits();
+    if (edits.length === 0) {
+      return;
+    }
+
+    this.preparingDownloads.set(true);
+    this.downloadNotice.set('');
+    this.errorMessage.set('');
+    try {
+      await document.fonts?.load('400 16px Geist')?.catch(() => undefined);
+      const used = new Map<string, number>();
+      const files: { name: string; blob: Blob }[] = [];
+      for (const edit of edits) {
+        files.push({
+          name: framedDownloadName(edit.fileName, used),
+          blob: await renderFramedPng(edit),
+        });
+      }
+      const shared = files.map((file) => new File([file.blob], file.name, { type: 'image/png' }));
+      let delivered = false;
+      if (canShareFramedFiles(shared)) {
+        try {
+          await navigator.share({ files: shared });
+          delivered = true;
+        } catch (error: unknown) {
+          if (isShareAbort(error)) {
+            return;
+          }
+        }
+      }
+      if (!delivered) {
+        await this.downloadZip(files);
+      }
+      await this.recordExports(edits);
+    } catch {
+      const message = 'The framed photos could not be created.';
+      this.downloadNotice.set(message);
+      this.errorMessage.set(message);
+    } finally {
+      this.preparingDownloads.set(false);
+    }
+  }
+
+  private exportEdits(): FramedExport[] {
+    const activeId = this.session.activeId();
+    const captions = this.captionModel();
+    const pan = this.pan();
+    const photo = this.photo();
+    return this.session.edits().map((edit) => {
+      if (edit.id !== activeId || !photo) {
+        return edit;
+      }
+      return {
+        ...edit,
+        fileName: photo.fileName,
+        rightCaption: captions.right,
+        date: captions.left,
+        panX: pan.x,
+        panY: pan.y,
+        zoom: this.zoom(),
+        orientation: this.orientation(),
+        image: photo.image,
+        handle: photo.handle,
+      };
+    });
+  }
+
+  private async downloadZip(files: readonly { name: string; blob: Blob }[]): Promise<void> {
+    const entries = await Promise.all(
+      files.map(async (file) => ({
+        name: file.name,
+        bytes: new Uint8Array(await file.blob.arrayBuffer()),
+      })),
+    );
+    downloadFile(zipStored(entries), 'ricordo.zip');
+  }
+
+  private async recordExports(edits: readonly FramedExport[]): Promise<void> {
+    for (const edit of edits) {
+      const frame = buildFrameLayout(edit.orientation).photo;
+      const [image, thumbnail] = await Promise.all([
+        originalPng(edit.image),
+        thumbnailBlob(edit.image, frame.width, frame.height, edit.panX, edit.panY, edit.zoom),
+      ]);
+      await this.history.record({
+        fileName: edit.fileName,
+        rightCaption: edit.rightCaption,
+        date: edit.date,
+        thumbnail,
+        image,
+        handle: edit.handle,
+        panX: edit.panX,
+        panY: edit.panY,
+        zoom: edit.zoom,
+        orientation: edit.orientation,
+      });
+    }
+  }
+
   private readonly onPageHide = (): void => {
     if (!this.sessionReady() || this.restoreOffer()) {
       return;
@@ -1355,6 +1478,15 @@ function wheelDistance(event: WheelEvent): number {
     return event.deltaY * 400;
   }
   return event.deltaY;
+}
+
+function canShareFramedFiles(files: readonly File[]): boolean {
+  return (
+    files.length > 0 &&
+    window.matchMedia('(pointer: coarse)').matches &&
+    typeof navigator.share === 'function' &&
+    navigator.canShare?.({ files: [...files] }) === true
+  );
 }
 
 function canSaveToGallery(file: File): boolean {

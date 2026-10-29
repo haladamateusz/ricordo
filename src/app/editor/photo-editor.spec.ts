@@ -354,6 +354,118 @@ describe('PhotoEditor', () => {
     expect(handles.values.size).toBe(0);
   });
 
+  it('downloads every current edit as one zip and keeps the open caption', async () => {
+    stubElementBox();
+    stubFramedCanvas();
+    await loadFiles(fixture, [
+      new File(['dog'], 'dog.png', { type: 'image/png' }),
+      new File(['pier'], 'pier.png', { type: 'image/png' }),
+    ]);
+    const session = currentSession(fixture);
+    const dog = session.edits().find((edit) => edit.fileName === 'dog.png');
+    session.write(dog?.id ?? '', {
+      rightCaption: 'Harbor',
+      date: '2024-06-15',
+      panX: 0.2,
+      panY: 0.7,
+      zoom: 1.2,
+      orientation: 'portrait',
+    });
+    state(fixture).captionModel.set({ left: '2024-08-01', right: 'Dawn' });
+    const created: Blob[] = [];
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((value) => {
+      if (value instanceof Blob) {
+        created.push(value);
+      }
+      return 'blob:photo';
+    });
+    const downloads: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      downloads.push(this.download);
+    });
+
+    button(fixture, 'Download all').click();
+
+    await vi.waitFor(() => {
+      expect(downloads).toEqual(['ricordo.zip']);
+    });
+    const zip = created.find((blob) => blob.type === 'application/zip');
+    if (!zip) {
+      throw new Error('Missing zip');
+    }
+    expect(readStoredNames(new Uint8Array(await zip.arrayBuffer()))).toEqual([
+      'pier-framed.png',
+      'dog-framed.png',
+    ]);
+    await vi.waitFor(() => {
+      expect(TestBed.inject(EditHistory).edits()).toHaveLength(2);
+    });
+    expect(TestBed.inject(EditHistory).edits()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ fileName: 'pier.png', rightCaption: 'Dawn', date: '2024-08-01' }),
+        expect.objectContaining({
+          fileName: 'dog.png',
+          rightCaption: 'Harbor',
+          date: '2024-06-15',
+        }),
+      ]),
+    );
+  });
+
+  it('shares every current edit on a phone that can take the files', async () => {
+    stubElementBox();
+    stubFramedCanvas();
+    await loadFiles(fixture, [
+      new File(['dog'], 'dog.png', { type: 'image/png' }),
+      new File(['pier'], 'pier.png', { type: 'image/png' }),
+    ]);
+    stubCoarsePointer(true);
+    const share = vi.fn().mockResolvedValue(undefined);
+    const restoreShare = stubShare(share);
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined);
+
+    button(fixture, 'Download all').click();
+    await fixture.whenStable();
+
+    await vi.waitFor(() => {
+      expect(share).toHaveBeenCalledOnce();
+    });
+    const shared = share.mock.calls[0]?.[0] as { files: File[] };
+    expect(shared.files.map((file) => file.name)).toEqual(['pier-framed.png', 'dog-framed.png']);
+    expect(click).not.toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(TestBed.inject(EditHistory).edits()).toHaveLength(2);
+    });
+    restoreShare();
+  });
+
+  it('keeps the edits unrecorded when sharing all of them is cancelled', async () => {
+    stubElementBox();
+    stubFramedCanvas();
+    await loadPortrait(fixture);
+    stubCoarsePointer(true);
+    const share = vi.fn().mockRejectedValue(new DOMException('cancel', 'AbortError'));
+    const restoreShare = stubShare(share);
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined);
+
+    button(fixture, 'Download all').click();
+    await vi.waitFor(() => {
+      expect(share).toHaveBeenCalledOnce();
+    });
+    await fixture.whenStable();
+
+    expect(click).not.toHaveBeenCalled();
+    expect(TestBed.inject(EditHistory).edits()).toHaveLength(0);
+    expect(text(fixture)).not.toContain('The framed photos could not be created.');
+    restoreShare();
+  });
+
   it('saves the crop position with the download', async () => {
     stubElementBox();
     await loadPortrait(fixture);
@@ -712,7 +824,9 @@ describe('PhotoEditor', () => {
 
     expect(state(fixture).orientation()).toBe('landscape');
     expect(state(fixture).frameRatio()).toBeGreaterThan(1);
-    expect(button(fixture, 'Orientation').getAttribute('aria-label')).toBe('Orientation to 10 by 15');
+    expect(button(fixture, 'Orientation').getAttribute('aria-label')).toBe(
+      'Orientation to 10 by 15',
+    );
     expect(orientationFront(fixture)).toEqual({ width: '9.5', height: '15.5' });
     expect(currentSession(fixture).edits()[0]?.orientation).toBe('landscape');
 
@@ -728,7 +842,9 @@ describe('PhotoEditor', () => {
 
     expect(state(fixture).orientation()).toBe('landscape');
     expect(state(fixture).frameRatio()).toBeGreaterThan(1);
-    expect(button(fixture, 'Orientation').getAttribute('aria-label')).toBe('Orientation to 10 by 15');
+    expect(button(fixture, 'Orientation').getAttribute('aria-label')).toBe(
+      'Orientation to 10 by 15',
+    );
   });
 
   it('uses the replacement photo ratio', async () => {
@@ -1006,13 +1122,52 @@ function orientationFront(fixture: ComponentFixture<PhotoEditor>): {
 }
 
 function button(fixture: ComponentFixture<PhotoEditor>, name: string): HTMLButtonElement {
-  const match = [...fixture.nativeElement.querySelectorAll('button')].find((element) =>
-    element.textContent?.includes(name),
+  const buttons = [...fixture.nativeElement.querySelectorAll('button')];
+  const exact = buttons.find(
+    (element) => element.textContent?.replace(/\s+/g, ' ').trim() === name,
   );
+  const match = exact ?? buttons.find((element) => element.textContent?.includes(name));
   if (!(match instanceof HTMLButtonElement)) {
     throw new Error(`Missing ${name} button`);
   }
   return match;
+}
+
+function stubFramedCanvas(): void {
+  const noop = (): void => undefined;
+  const context = {
+    clearRect: noop,
+    fillRect: noop,
+    save: noop,
+    restore: noop,
+    beginPath: noop,
+    rect: noop,
+    clip: noop,
+    drawImage: noop,
+    measureText: () => ({ width: 12 }),
+    fillText: noop,
+  };
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+    context as unknown as CanvasRenderingContext2D,
+  );
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) => {
+    callback?.(new Blob(['png'], { type: 'image/png' }));
+  });
+}
+
+function readStoredNames(bytes: Uint8Array): string[] {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const names: string[] = [];
+  let offset = 0;
+  while (offset + 4 <= bytes.byteLength && view.getUint32(offset, true) === 0x04034b50) {
+    const nameLength = view.getUint16(offset + 26, true);
+    const extraLength = view.getUint16(offset + 28, true);
+    const size = view.getUint32(offset + 22, true);
+    const nameStart = offset + 30;
+    names.push(new TextDecoder().decode(bytes.subarray(nameStart, nameStart + nameLength)));
+    offset = nameStart + nameLength + extraLength + size;
+  }
+  return names;
 }
 
 function stubCanvasExport(fixture: ComponentFixture<PhotoEditor>): void {
@@ -1073,6 +1228,15 @@ function chooseFile(input: HTMLInputElement, file: File): void {
 async function loadPortrait(fixture: ComponentFixture<PhotoEditor>): Promise<void> {
   chooseFile(fileInput(fixture), new File(['photo'], 'dog.png', { type: 'image/png' }));
   await fixture.whenStable();
+}
+
+async function loadFiles(fixture: ComponentFixture<PhotoEditor>, files: File[]): Promise<void> {
+  const input = fileInput(fixture);
+  Object.defineProperty(input, 'files', { configurable: true, value: files });
+  input.dispatchEvent(new Event('change'));
+  await vi.waitFor(() => {
+    expect(text(fixture)).toContain(files[files.length - 1]?.name ?? '');
+  });
 }
 
 async function loadPicked(fixture: ComponentFixture<PhotoEditor>, file: File): Promise<void> {

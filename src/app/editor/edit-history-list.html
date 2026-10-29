@@ -116,7 +116,19 @@
           <p class="history-empty">No current edits</p>
         } @else {
           <div class="current-toolbar">
+            <button
+              type="button"
+              class="download-all"
+              [disabled]="preparingDownloads()"
+              [attr.aria-busy]="preparingDownloads() ? 'true' : null"
+              (click)="downloadAll.emit()"
+            >
+              {{ preparingDownloads() ? 'Preparing...' : 'Download all' }}
+            </button>
             <button type="button" class="sort-oldest" (click)="sortOldest()">Oldest first</button>
+            @if (downloadNotice()) {
+              <p class="download-notice" role="alert">{{ downloadNotice() }}</p>
+            }
           </div>
           <div #currentScroll class="history-scroll" [class.is-reordering]="draggingId()">
             <p class="reorder-status" aria-live="polite">{{ reorderStatus() }}</p>

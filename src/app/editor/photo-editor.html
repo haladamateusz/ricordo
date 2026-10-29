@@ -55,9 +55,12 @@
 }
 <div class="editor" [attr.inert]="!sessionReady() || restoreOffer() ? '' : null">
   <app-edit-history-list
+    [preparingDownloads]="preparingDownloads()"
+    [downloadNotice]="downloadNotice()"
     (selected)="openPastEdit($event)"
     (currentSelected)="openCurrentEdit($event)"
     (reordered)="saveCurrentOrder()"
+    (downloadAll)="downloadAll()"
   >
     @if (hasCurrentEdits()) {
       <button
@@ -99,7 +102,7 @@
         </span>
         <strong>{{ loadingCount() > 0 ? loadingLabel() : 'Choose a photo' }}</strong>
         <span id="current-photo-hint" class="photo-hint"
-        >JPEG, PNG, WebP, or HEIC. You can also drop files here.</span
+          >JPEG, PNG, WebP, or HEIC. You can also drop files here.</span
         >
       </button>
     }
@@ -271,7 +274,7 @@
           </span>
           <strong>{{ loadingCount() > 0 ? loadingLabel() : 'Choose a photo' }}</strong>
           <span id="photo-hint" class="photo-hint"
-          >JPEG, PNG, WebP, or HEIC. You can also drop files here.</span
+            >JPEG, PNG, WebP, or HEIC. You can also drop files here.</span
           >
         </button>
       }

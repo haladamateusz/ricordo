@@ -73,6 +73,7 @@ describe('EditHistoryList', () => {
       expect(fixture.nativeElement.querySelector('.history-caption')).toBeNull();
       expect(text(fixture)).toContain('No current edits');
       expect(text(fixture)).not.toContain('Oldest first');
+      expect(text(fixture)).not.toContain('Download all');
     });
     expect(tab(fixture, 'Current edits').getAttribute('aria-selected')).toBe('true');
 
