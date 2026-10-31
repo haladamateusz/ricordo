@@ -192,11 +192,18 @@ export class PhotoEditor {
     const count = this.restoreOffer()?.edits.length ?? 0;
     return this.transloco.translate(`restore.summary.${this.plural(count)}`, { count });
   });
-  protected readonly restorePreview = computed(
-    () => this.restoreOffer()?.edits.slice(0, restorePreviewLimit) ?? [],
-  );
+  protected readonly restoreShown = computed(() => {
+    const edits = this.restoreOffer()?.edits ?? [];
+    if (!this.restoring()) {
+      return edits.slice(0, restorePreviewLimit);
+    }
+    const current = edits[Math.min(this.restoreDone(), edits.length - 1)];
+    return current ? [current] : [];
+  });
   protected readonly restoreMore = computed(() =>
-    Math.max(0, (this.restoreOffer()?.edits.length ?? 0) - restorePreviewLimit),
+    this.restoring()
+      ? 0
+      : Math.max(0, (this.restoreOffer()?.edits.length ?? 0) - restorePreviewLimit),
   );
   protected readonly restoreDone = signal(0);
   protected readonly restoreTotal = computed(() => this.restoreOffer()?.edits.length ?? 0);
@@ -1595,9 +1602,7 @@ export class PhotoEditor {
       try {
         const source = await this.sessionStore.image(record.id);
         if (!source) {
-          if (record.thumbnailUrl) {
-            URL.revokeObjectURL(record.thumbnailUrl);
-          }
+          this.dropThumbnail(record);
           continue;
         }
 
@@ -1622,9 +1627,7 @@ export class PhotoEditor {
           });
         } catch {
           URL.revokeObjectURL(objectUrl);
-          if (record.thumbnailUrl) {
-            URL.revokeObjectURL(record.thumbnailUrl);
-          }
+          this.dropThumbnail(record);
         }
       } finally {
         this.noteRestoreProgress(index + 1, offer.edits.length);
@@ -1671,6 +1674,14 @@ export class PhotoEditor {
     if (done % step === 0) {
       this.milestone.set({ kind: 'done', done, total });
     }
+  }
+
+  private dropThumbnail(record: SessionPreview): void {
+    if (!record.thumbnailUrl) {
+      return;
+    }
+    URL.revokeObjectURL(record.thumbnailUrl);
+    record.thumbnailUrl = '';
   }
 
   private releaseOffer(): void {

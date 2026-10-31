@@ -20,10 +20,10 @@
         }
       </ul>
       <ul class="restore-photos">
-        @for (edit of restorePreview(); track edit.id) {
+        @for (edit of restoreShown(); track edit.id) {
           <li>
             @if (edit.thumbnailUrl) {
-              <img [src]="edit.thumbnailUrl" alt="" />
+              <img [src]="edit.thumbnailUrl" [alt]="restoring() ? edit.fileName : ''" />
             } @else {
               <span class="restore-fallback"></span>
             }

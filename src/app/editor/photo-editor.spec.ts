@@ -1212,6 +1212,7 @@ describe('PhotoEditor stored session', () => {
     await vi.waitFor(() => {
       expect(text(fixture)).toContain('Restoring 0 of 2 photos');
     });
+    expect(restoreThumbAlts(fixture)).toEqual(['night.png']);
     const progress = fixture.nativeElement.querySelector('[role="progressbar"]') as HTMLElement;
     expect(progress.getAttribute('aria-valuemin')).toBe('0');
     expect(progress.getAttribute('aria-valuenow')).toBe('0');
@@ -1230,6 +1231,7 @@ describe('PhotoEditor stored session', () => {
       expect(text(fixture)).toContain('Restoring 1 of 2 photos');
       expect(FakeImage.held).toHaveLength(2);
     });
+    expect(restoreThumbAlts(fixture)).toEqual(['harbor.png']);
     expect(progress.getAttribute('aria-valuenow')).toBe('1');
     expect(fillProgress(progress)).toBe(0.5);
     expect(fixture.nativeElement.querySelector('[role="status"]')?.textContent).toContain(
@@ -1366,6 +1368,12 @@ function orientationFront(fixture: ComponentFixture<PhotoEditor>): {
     width: front?.getAttribute('width') ?? null,
     height: front?.getAttribute('height') ?? null,
   };
+}
+
+function restoreThumbAlts(fixture: ComponentFixture<PhotoEditor>): string[] {
+  return [...fixture.nativeElement.querySelectorAll('.restore-photos img')].map((image) =>
+    image instanceof HTMLImageElement ? image.alt : '',
+  );
 }
 
 function fillProgress(progress: HTMLElement): number {
