@@ -55,7 +55,13 @@ export function paintFrame(
   ctx.font = `400 ${layout.captionFontSizePx}px ${CAPTION_FONT_FAMILY}`;
   const dateSlot = Math.ceil(ctx.measureText(longestCaptionDate).width);
   const captionGap = Math.round(mmToPx(captionGapMm));
-  const rightCaptionMaxWidth = Math.max(0, photo.width - dateSlot - captionGap);
+  const dateText = leftCaption.trim();
+  const dateWidth =
+    dateText === '' ? 0 : Math.min(dateSlot, Math.ceil(ctx.measureText(dateText).width));
+  const rightCaptionMaxWidth = Math.max(
+    0,
+    photo.width - dateWidth - (dateWidth > 0 ? captionGap : 0),
+  );
   paintCaption(
     ctx,
     leftCaption,

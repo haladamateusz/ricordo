@@ -51,6 +51,38 @@ describe('paintFrame', () => {
     expect(rightMax).toBeGreaterThan(layout.photo.width / 2);
   });
 
+  it('keeps the right caption full size when the date leaves enough room', () => {
+    const { context, fonts } = recordingContext();
+    const portrait = buildFrameLayout('portrait');
+    const date = '31 lipca 2025';
+    const rightCaption = 'x'.repeat(100);
+
+    paintFrame(context, image, 2000, 4000, portrait, 0.5, 0.5, 1, date, rightCaption);
+
+    const gap = Math.round(mmToPx(captionGapMm));
+    const besideDate = portrait.photo.width - date.length * 8 - gap;
+    const besideLongest = portrait.photo.width - longestCaptionDate.length * 8 - gap;
+
+    expect(rightCaption.length * 8).toBeGreaterThan(besideLongest);
+    expect(rightCaption.length * 8).toBeLessThanOrEqual(besideDate);
+    expect(fonts[1]).toBe(`400 ${portrait.captionFontSizePx}px Geist, sans-serif`);
+  });
+
+  it('scales the right caption only when it is wider than the room beside the date', () => {
+    const { context, fonts } = recordingContext();
+    const portrait = buildFrameLayout('portrait');
+    const date = '23 marca 2026';
+    const rightCaption = 'x'.repeat(200);
+
+    paintFrame(context, image, 2000, 4000, portrait, 0.5, 0.5, 1, date, rightCaption);
+
+    const besideDate = portrait.photo.width - date.length * 8 - Math.round(mmToPx(captionGapMm));
+    const rightScale = captionFontScale(rightCaption.length * 8, besideDate);
+
+    expect(rightScale).toBeLessThan(1);
+    expect(fonts[1]).toBe(`400 ${portrait.captionFontSizePx * rightScale}px Geist, sans-serif`);
+  });
+
   it('uses a tighter crop when the photo is zoomed in', () => {
     const fitted = recordingContext();
     const zoomed = recordingContext();
