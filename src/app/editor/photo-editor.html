@@ -6,7 +6,9 @@
       role="dialog"
       aria-modal="true"
       aria-labelledby="restore-title"
-      aria-describedby="restore-copy restore-files"
+      [attr.aria-describedby]="
+        restoring() ? 'restore-copy restore-files restore-status' : 'restore-copy restore-files'
+      "
       [attr.aria-busy]="restoring() ? 'true' : null"
       (keydown)="onRestoreKey($event)"
     >
@@ -31,6 +33,22 @@
           <li class="restore-more">+{{ restoreMore() }}</li>
         }
       </ul>
+      @if (restoring()) {
+        <div class="restore-progress">
+          <p id="restore-status" class="restore-status">{{ restoreStatus() }}</p>
+          <div
+            class="restore-meter"
+            role="progressbar"
+            aria-labelledby="restore-status"
+            aria-valuemin="0"
+            [attr.aria-valuenow]="restoreDone()"
+            [attr.aria-valuemax]="restoreTotal()"
+          >
+            <span class="restore-meter__fill" [style.width.%]="restorePercent()"></span>
+          </div>
+          <p class="sr-only" role="status">{{ restoreMilestone() }}</p>
+        </div>
+      }
       <div class="restore-actions">
         <button
           id="restore-session"
@@ -39,7 +57,7 @@
           [disabled]="restoring()"
           (click)="restoreSession()"
         >
-          Restore session
+          {{ restoring() ? 'Restoring...' : 'Restore session' }}
         </button>
         <button
           type="button"

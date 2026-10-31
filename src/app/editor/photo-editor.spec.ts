@@ -1043,6 +1043,55 @@ describe('PhotoEditor stored session', () => {
     expect(caption.value).toBe('Night');
   });
 
+  it('shows how many photos have been restored', async () => {
+    await vi.waitFor(() => {
+      expect(text(fixture)).toContain('Restore session');
+    });
+
+    FakeImage.hold = true;
+    button(fixture, 'Restore session').click();
+
+    await vi.waitFor(() => {
+      expect(text(fixture)).toContain('Restoring 0 of 2 photos');
+    });
+    const progress = fixture.nativeElement.querySelector('[role="progressbar"]') as HTMLElement;
+    expect(progress.getAttribute('aria-valuemin')).toBe('0');
+    expect(progress.getAttribute('aria-valuenow')).toBe('0');
+    expect(progress.getAttribute('aria-valuemax')).toBe('2');
+    expect(progress.getAttribute('aria-labelledby')).toBe('restore-status');
+    expect(button(fixture, 'Restoring...').disabled).toBe(true);
+    expect(button(fixture, 'Start from scratch').disabled).toBe(true);
+    expect(fixture.nativeElement.querySelector('[role="status"]')?.textContent).toContain(
+      'Restoring 2 photos.',
+    );
+
+    FakeImage.held[0]?.onload?.();
+
+    await vi.waitFor(() => {
+      expect(text(fixture)).toContain('Restoring 1 of 2 photos');
+      expect(FakeImage.held).toHaveLength(2);
+    });
+    expect(progress.getAttribute('aria-valuenow')).toBe('1');
+    expect(fixture.nativeElement.querySelector('[role="status"]')?.textContent).toContain(
+      'Restored 1 of 2 photos.',
+    );
+
+    FakeImage.hold = false;
+    for (const image of FakeImage.held) {
+      image.onload?.();
+    }
+    FakeImage.held = [];
+
+    await vi.waitFor(() => {
+      expect(text(fixture)).not.toContain('Restore previous session?');
+    });
+    expect(
+      currentSession(fixture)
+        .edits()
+        .map((edit) => edit.fileName),
+    ).toEqual(['night.png', 'harbor.png']);
+  });
+
   it('starts from scratch and stays empty on the next visit', async () => {
     await vi.waitFor(() => {
       expect(text(fixture)).toContain('Start from scratch');

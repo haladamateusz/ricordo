@@ -181,6 +181,22 @@ export class PhotoEditor {
   protected readonly restoreMore = computed(() =>
     Math.max(0, (this.restoreOffer()?.edits.length ?? 0) - restorePreviewLimit),
   );
+  protected readonly restoreDone = signal(0);
+  protected readonly restoreTotal = computed(() => this.restoreOffer()?.edits.length ?? 0);
+  protected readonly restoreStatus = computed(() => {
+    const total = this.restoreTotal();
+    const done = Math.min(this.restoreDone(), total);
+    const photos = total === 1 ? 'photo' : 'photos';
+    return `Restoring ${done} of ${total} ${photos}`;
+  });
+  protected readonly restorePercent = computed(() => {
+    const total = this.restoreTotal();
+    if (total === 0) {
+      return 0;
+    }
+    return (Math.min(this.restoreDone(), total) / total) * 100;
+  });
+  protected readonly restoreMilestone = signal('');
   private readonly loadingDone = signal(0);
   protected readonly loadingLabel = computed(() => {
     const total = this.loadingCount();
@@ -1309,6 +1325,7 @@ export class PhotoEditor {
     if (!offer || this.restoring()) {
       return;
     }
+    this.noteRestoreProgress(0, offer.edits.length);
     this.restoring.set(true);
     void this.rebuildSession(offer);
   }
@@ -1341,44 +1358,50 @@ export class PhotoEditor {
 
   private async rebuildSession(offer: RestoreOffer): Promise<void> {
     const edits: CurrentEdit[] = [];
-    for (const record of offer.edits) {
-      const source = await this.sessionStore.image(record.id);
-      if (!source) {
-        if (record.thumbnailUrl) {
-          URL.revokeObjectURL(record.thumbnailUrl);
-        }
-        continue;
-      }
-
-      const objectUrl = URL.createObjectURL(source);
+    for (const [index, record] of offer.edits.entries()) {
       try {
-        const image = await loadImage(objectUrl);
-        edits.push({
-          id: record.id,
-          fileName: record.fileName,
-          rightCaption: record.rightCaption,
-          date: record.date,
-          panX: record.panX,
-          panY: record.panY,
-          zoom: record.zoom,
-          orientation: record.orientation,
-          thumbnailUrl: record.thumbnailUrl,
-          thumbnail: record.thumbnail,
-          image,
-          objectUrl,
-          source,
-          handle: (await this.sessionStore.handle(record.id)) ?? null,
-        });
-      } catch {
-        URL.revokeObjectURL(objectUrl);
-        if (record.thumbnailUrl) {
-          URL.revokeObjectURL(record.thumbnailUrl);
+        const source = await this.sessionStore.image(record.id);
+        if (!source) {
+          if (record.thumbnailUrl) {
+            URL.revokeObjectURL(record.thumbnailUrl);
+          }
+          continue;
         }
+
+        const objectUrl = URL.createObjectURL(source);
+        try {
+          const image = await loadImage(objectUrl);
+          edits.push({
+            id: record.id,
+            fileName: record.fileName,
+            rightCaption: record.rightCaption,
+            date: record.date,
+            panX: record.panX,
+            panY: record.panY,
+            zoom: record.zoom,
+            orientation: record.orientation,
+            thumbnailUrl: record.thumbnailUrl,
+            thumbnail: record.thumbnail,
+            image,
+            objectUrl,
+            source,
+            handle: (await this.sessionStore.handle(record.id)) ?? null,
+          });
+        } catch {
+          URL.revokeObjectURL(objectUrl);
+          if (record.thumbnailUrl) {
+            URL.revokeObjectURL(record.thumbnailUrl);
+          }
+        }
+      } finally {
+        this.noteRestoreProgress(index + 1, offer.edits.length);
       }
     }
 
     this.restoreOffer.set(null);
     this.restoring.set(false);
+    this.restoreDone.set(0);
+    this.restoreMilestone.set('');
     if (edits.length === 0) {
       this.errorMessage.set('The previous session could not be restored.');
       await this.sessionStore.clear().catch(() => undefined);
@@ -1397,6 +1420,24 @@ export class PhotoEditor {
       void this.refreshThumbnail(edit.id, edit.panX, edit.panY, edit.zoom, edit.orientation);
     }
     this.editList()?.showCurrent();
+  }
+
+  private noteRestoreProgress(done: number, total: number): void {
+    this.restoreDone.set(done);
+    if (total === 0) {
+      return;
+    }
+
+    const photos = total === 1 ? 'photo' : 'photos';
+    if (done === 0) {
+      this.restoreMilestone.set(`Restoring ${total} ${photos}.`);
+      return;
+    }
+
+    const step = Math.max(1, Math.ceil(total / 10));
+    if (done % step === 0) {
+      this.restoreMilestone.set(`Restored ${done} of ${total} ${photos}.`);
+    }
   }
 
   private releaseOffer(): void {

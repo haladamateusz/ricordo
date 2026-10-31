@@ -470,6 +470,41 @@ input:focus-visible,
   font-weight: 700;
 }
 
+.restore-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.restore-status {
+  margin: 0;
+  color: color-mix(in srgb, var(--text) 78%, transparent);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+
+.restore-meter {
+  height: 0.375rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--secondary);
+}
+
+.restore-meter__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 180ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .restore-meter__fill {
+    transition: none;
+  }
+}
+
 .restore-actions {
   display: flex;
   flex-wrap: wrap;
