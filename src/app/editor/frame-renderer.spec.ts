@@ -55,7 +55,7 @@ describe('paintFrame', () => {
     const { context, fonts } = recordingContext();
     const portrait = buildFrameLayout('portrait');
     const date = '31 lipca 2025';
-    const rightCaption = 'x'.repeat(100);
+    const rightCaption = 'x'.repeat(104);
 
     paintFrame(context, image, 2000, 4000, portrait, 0.5, 0.5, 1, date, rightCaption);
 

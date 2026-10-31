@@ -6,7 +6,7 @@ const PAD_TOP_MM = 10 / 3;
 const PAD_SIDE_MM = 10 / 3;
 const PAD_BOTTOM_MM = 28 / 3;
 const CAPTION_SIZE_MM = 3.5;
-export const captionGapMm = 4;
+export const captionGapMm = 3;
 /**
  * Edge the CEWE Fotojoker exposure mask can leave unprinted.
  * https://www.cewe.pl/FAQ.html
