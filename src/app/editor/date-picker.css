@@ -213,3 +213,29 @@ calendar-month::part(selected) {
   background: var(--accent);
   color: var(--accent-foreground);
 }
+
+@media (max-width: 640px) {
+  .date-picker__dialog {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  calendar-date,
+  calendar-month {
+    width: 100%;
+    inline-size: 100%;
+  }
+
+  calendar-month::part(table) {
+    width: 100%;
+    table-layout: fixed;
+  }
+
+  calendar-month::part(button) {
+    box-sizing: border-box;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+  }
+}
