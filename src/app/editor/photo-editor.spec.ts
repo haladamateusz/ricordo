@@ -1058,6 +1058,7 @@ describe('PhotoEditor stored session', () => {
     expect(progress.getAttribute('aria-valuemin')).toBe('0');
     expect(progress.getAttribute('aria-valuenow')).toBe('0');
     expect(progress.getAttribute('aria-valuemax')).toBe('2');
+    expect(fillProgress(progress)).toBe(0);
     expect(progress.getAttribute('aria-labelledby')).toBe('restore-status');
     expect(button(fixture, 'Restoring...').disabled).toBe(true);
     expect(button(fixture, 'Start from scratch').disabled).toBe(true);
@@ -1072,6 +1073,7 @@ describe('PhotoEditor stored session', () => {
       expect(FakeImage.held).toHaveLength(2);
     });
     expect(progress.getAttribute('aria-valuenow')).toBe('1');
+    expect(fillProgress(progress)).toBe(0.5);
     expect(fixture.nativeElement.querySelector('[role="status"]')?.textContent).toContain(
       'Restored 1 of 2 photos.',
     );
@@ -1168,6 +1170,14 @@ function orientationFront(fixture: ComponentFixture<PhotoEditor>): {
     width: front?.getAttribute('width') ?? null,
     height: front?.getAttribute('height') ?? null,
   };
+}
+
+function fillProgress(progress: HTMLElement): number {
+  const fill = progress.querySelector('.restore-meter__fill');
+  if (!(fill instanceof HTMLElement)) {
+    throw new Error('Missing restore progress fill');
+  }
+  return Number(fill.style.getPropertyValue('--restore-progress'));
 }
 
 function button(fixture: ComponentFixture<PhotoEditor>, name: string): HTMLButtonElement {

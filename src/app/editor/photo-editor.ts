@@ -189,12 +189,12 @@ export class PhotoEditor {
     const photos = total === 1 ? 'photo' : 'photos';
     return `Restoring ${done} of ${total} ${photos}`;
   });
-  protected readonly restorePercent = computed(() => {
+  protected readonly restoreFraction = computed(() => {
     const total = this.restoreTotal();
     if (total === 0) {
       return 0;
     }
-    return (Math.min(this.restoreDone(), total) / total) * 100;
+    return Math.min(this.restoreDone(), total) / total;
   });
   protected readonly restoreMilestone = signal('');
   private readonly loadingDone = signal(0);
@@ -1396,6 +1396,7 @@ export class PhotoEditor {
       } finally {
         this.noteRestoreProgress(index + 1, offer.edits.length);
       }
+      await yieldToPaint();
     }
 
     this.restoreOffer.set(null);
@@ -1565,6 +1566,12 @@ function downloadFile(blob: Blob, fileName: string): void {
   anchor.download = fileName;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function yieldToPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve);
+  });
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {

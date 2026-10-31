@@ -44,7 +44,7 @@
             [attr.aria-valuenow]="restoreDone()"
             [attr.aria-valuemax]="restoreTotal()"
           >
-            <span class="restore-meter__fill" [style.width.%]="restorePercent()"></span>
+            <span class="restore-meter__fill" [style.--restore-progress]="restoreFraction()"></span>
           </div>
           <p class="sr-only" role="status">{{ restoreMilestone() }}</p>
         </div>
