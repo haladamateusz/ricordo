@@ -8,6 +8,7 @@ import {
   inject,
   PendingTasks,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { disabled, form, FormField } from '@angular/forms/signals';
@@ -30,6 +31,14 @@ import {
   pickPhotoFiles,
 } from './photo-file-picker';
 import { originalPng, thumbnailBlob } from './photo-thumbnail';
+import { ProjectActions } from './project-actions';
+import {
+  projectArchive,
+  projectFileName,
+  readProjectArchive,
+  type ImportedProject,
+  type ProjectPhoto,
+} from './project-archive';
 
 import {
   buildFrameLayout,
@@ -137,12 +146,14 @@ export class PhotoEditor {
   private readonly history = inject(EditHistory);
   private readonly session = inject(CurrentSession);
   private readonly sessionStore = inject(CurrentSessionStore);
+  private readonly projectActions = inject(ProjectActions);
   private readonly pendingTasks = inject(PendingTasks);
   private committedKey = '';
   private replaceOnNextLoad = false;
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly canvas = viewChild<ElementRef<HTMLCanvasElement>>('preview');
   private readonly fileInput = viewChild<ElementRef<HTMLInputElement>>('fileInput');
+  private readonly projectInput = viewChild<ElementRef<HTMLInputElement>>('projectInput');
   private readonly editList = viewChild(EditHistoryList);
   private readonly restoreDialog = viewChild<ElementRef<HTMLElement>>('restoreDialog');
   private dragOrigin: { x: number; y: number; pan: Pan } | null = null;
@@ -289,7 +300,27 @@ export class PhotoEditor {
       this.session.release();
       this.revokePhoto();
       this.releaseOffer();
+      this.projectActions.canExport.set(false);
+      this.projectActions.downloadsBusy.set(false);
+      this.projectActions.task.set(null);
       window.removeEventListener('pagehide', this.onPageHide);
+    });
+
+    effect(() => {
+      this.projectActions.canExport.set(this.hasCurrentEdits());
+      this.projectActions.downloadsBusy.set(this.preparingDownloads());
+    });
+    effect(() => {
+      if (this.projectActions.exportRequest() === 0) {
+        return;
+      }
+      untracked(() => this.exportProject());
+    });
+    effect(() => {
+      if (this.projectActions.openRequest() === 0) {
+        return;
+      }
+      untracked(() => this.openProjectPicker());
     });
 
     window.addEventListener('pagehide', this.onPageHide);
@@ -723,6 +754,29 @@ export class PhotoEditor {
 
   protected downloadAll(): void {
     void this.exportAll();
+  }
+
+  protected exportProject(): void {
+    void this.saveProject();
+  }
+
+  protected openProjectPicker(): void {
+    if (this.preparingDownloads() || this.projectActions.task() !== null) {
+      return;
+    }
+    this.projectInput()?.nativeElement.click();
+  }
+
+  protected onProjectSelected(event: Event): void {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) {
+      return;
+    }
+    const file = input.files?.[0] ?? null;
+    input.value = '';
+    if (file) {
+      void this.importProject(file);
+    }
   }
 
   protected openPastEdit(edit: StoredEdit): void {
@@ -1198,8 +1252,169 @@ export class PhotoEditor {
     }
   }
 
+  private async saveProject(): Promise<void> {
+    if (this.preparingDownloads() || this.projectActions.task() !== null) {
+      return;
+    }
+
+    const { photos, activeIndex } = this.projectPhotos();
+    if (photos.length === 0) {
+      this.failProject('error.export');
+      return;
+    }
+
+    this.projectActions.task.set('export');
+    this.downloadKey.set(null);
+    this.errorKey.set(null);
+    try {
+      downloadFile(await projectArchive(photos, activeIndex), projectFileName);
+    } catch {
+      this.failProject('error.export');
+    } finally {
+      this.projectActions.task.set(null);
+    }
+  }
+
+  private projectPhotos(): { photos: ProjectPhoto[]; activeIndex: number } {
+    const activeId = this.session.activeId();
+    const captions = this.captionModel();
+    const pan = this.pan();
+    const open = this.photo();
+    const photos: ProjectPhoto[] = [];
+    let activeIndex = 0;
+
+    for (const edit of this.session.edits()) {
+      if (edit.id === activeId && open) {
+        if (open.source.size === 0) {
+          continue;
+        }
+        activeIndex = photos.length;
+        photos.push({
+          fileName: open.fileName,
+          rightCaption: captions.right,
+          date: captions.left,
+          panX: pan.x,
+          panY: pan.y,
+          zoom: this.zoom(),
+          orientation: this.orientation(),
+          source: open.source,
+        });
+        continue;
+      }
+
+      if (edit.source.size === 0) {
+        continue;
+      }
+      photos.push({
+        fileName: edit.fileName,
+        rightCaption: edit.rightCaption,
+        date: edit.date,
+        panX: edit.panX,
+        panY: edit.panY,
+        zoom: edit.zoom,
+        orientation: edit.orientation,
+        source: edit.source,
+      });
+    }
+
+    return { photos, activeIndex };
+  }
+
+  private async importProject(file: File): Promise<void> {
+    if (this.preparingDownloads() || this.projectActions.task() !== null) {
+      return;
+    }
+    if (
+      this.session.edits().length > 0 &&
+      !window.confirm(this.transloco.translate('error.replaceProject'))
+    ) {
+      return;
+    }
+
+    this.projectActions.task.set('import');
+    this.downloadKey.set(null);
+    this.errorKey.set(null);
+    try {
+      const project = await readProjectArchive(file);
+      if (!project) {
+        this.failProject('error.project');
+        return;
+      }
+
+      const loaded = await this.loadProjectPhotos(project);
+      if (loaded.edits.length === 0) {
+        this.failProject('error.project');
+        return;
+      }
+
+      this.session.adopt(loaded.edits, loaded.activeId);
+      this.persistSession(loaded.edits.map((edit) => edit.id));
+      const active = loaded.activeId ? this.session.find(loaded.activeId) : undefined;
+      if (active) {
+        this.openCurrentEdit(active);
+      }
+      for (const edit of loaded.edits) {
+        void this.refreshThumbnail(edit.id, edit.panX, edit.panY, edit.zoom, edit.orientation);
+      }
+      this.editList()?.showCurrent();
+      if (loaded.failed > 0) {
+        this.failProject('error.projectSome');
+      }
+    } catch {
+      this.failProject('error.project');
+    } finally {
+      this.projectActions.task.set(null);
+    }
+  }
+
+  private async loadProjectPhotos(
+    project: ImportedProject,
+  ): Promise<{ edits: CurrentEdit[]; activeId: string | null; failed: number }> {
+    const edits: CurrentEdit[] = [];
+    let activeId: string | null = null;
+    let failed = 0;
+
+    for (const [index, photo] of project.photos.entries()) {
+      const objectUrl = URL.createObjectURL(photo.source);
+      try {
+        const image = await loadImage(objectUrl);
+        const id = crypto.randomUUID();
+        if (index === project.activeIndex) {
+          activeId = id;
+        }
+        edits.push({
+          id,
+          fileName: photo.fileName,
+          rightCaption: photo.rightCaption,
+          date: photo.date,
+          panX: photo.panX,
+          panY: photo.panY,
+          zoom: photo.zoom,
+          orientation: photo.orientation,
+          thumbnailUrl: '',
+          thumbnail: new Blob(),
+          image,
+          objectUrl,
+          source: photo.source,
+          handle: null,
+        });
+      } catch {
+        URL.revokeObjectURL(objectUrl);
+        failed += 1;
+      }
+      await yieldToPaint();
+    }
+
+    return { edits, activeId: activeId ?? edits[0]?.id ?? null, failed };
+  }
+
+  private failProject(key: string): void {
+    this.downloadKey.set({ key });
+    this.errorKey.set({ key });
+  }
+
   private async exportAll(): Promise<void> {
-    if (this.preparingDownloads()) {
+    if (this.preparingDownloads() || this.projectActions.task() !== null) {
       return;
     }
     const edits = this.exportEdits();

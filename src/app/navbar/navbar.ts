@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 import { TranslocoPipe } from '@jsverse/transloco';
 
 import { EditDrawer } from '../editor/edit-drawer';
+import { ProjectActions } from '../editor/project-actions';
 import { LanguageMenu } from './language-menu';
 
 @Component({
@@ -21,6 +22,7 @@ export class Navbar {
 
   protected readonly drawer = inject(EditDrawer);
   protected readonly languageSheetOpen = computed(() => this.languageMenu()?.sheetOpen() ?? false);
+  protected readonly actions = inject(ProjectActions);
 
   constructor() {
     effect(() => {

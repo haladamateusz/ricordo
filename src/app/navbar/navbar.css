@@ -18,11 +18,50 @@
   padding-inline: 1.25rem;
 }
 
+.projects,
 .actions {
   display: flex;
   align-items: center;
   gap: 0.15rem;
+}
+
+.projects {
+  margin-inline-start: 0.35rem;
+}
+
+.actions {
   margin-inline-start: auto;
+}
+
+.project {
+  display: inline-flex;
+  height: 2.75rem;
+  align-items: center;
+  border: 0;
+  border-radius: 0.55rem;
+  background: transparent;
+  padding-inline: 0.65rem;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.project:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.project:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.project:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .menu {
@@ -53,6 +92,10 @@
 }
 
 @media (max-width: 640px) {
+  .projects {
+    display: none;
+  }
+
   .menu {
     display: inline-flex;
   }

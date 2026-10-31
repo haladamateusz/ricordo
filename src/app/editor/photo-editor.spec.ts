@@ -24,6 +24,8 @@ import {
 } from './current-session-store';
 import { provideAppTranslations } from '../i18n/provide-app-translations';
 import { PhotoEditor } from './photo-editor';
+import { ProjectActions } from './project-actions';
+import { projectArchive, readProjectArchive, type ProjectPhoto } from './project-archive';
 import { heicWithExifDate, jpegWithExifDate } from './photo-exif-fixture';
 import { PHOTO_FILE_PICKER, type PhotoSelection } from './photo-file-picker';
 
@@ -415,6 +417,157 @@ describe('PhotoEditor', () => {
         }),
       ]),
     );
+  });
+
+  it('exports the current project with photos, crop, captions, dates, and order', async () => {
+    stubElementBox();
+    await loadFiles(fixture, [
+      new File(['dog-bytes'], 'dog.png', { type: 'image/png' }),
+      new File(['pier-bytes'], 'pier.png', { type: 'image/png' }),
+    ]);
+    const session = currentSession(fixture);
+    const dog = session.edits().find((edit) => edit.fileName === 'dog.png');
+    session.write(dog?.id ?? '', {
+      rightCaption: 'Harbor',
+      date: '2024-06-15T18:04:00',
+      panX: 0.15,
+      panY: 0.85,
+      zoom: 2,
+      orientation: 'landscape',
+    });
+    state(fixture).captionModel.set({ left: '2024-08-01', right: 'Dawn' });
+    state(fixture).pan.set({ x: 0.2, y: 0.7 });
+    state(fixture).zoom.set(1.2);
+    const created: Blob[] = [];
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((value) => {
+      if (value instanceof Blob) {
+        created.push(value);
+      }
+      return 'blob:photo';
+    });
+    const downloads: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      downloads.push(this.download);
+    });
+
+    TestBed.inject(ProjectActions).requestExport();
+    await fixture.whenStable();
+
+    await vi.waitFor(() => {
+      expect(downloads).toEqual(['ricordo-project.zip']);
+    });
+    const zip = created.find((blob) => blob.type === 'application/zip');
+    if (!zip) {
+      throw new Error('Missing project');
+    }
+    const project = await readProject(zip);
+    expect(project.activeIndex).toBe(0);
+    expect(project.photos.map((photo) => photo.fileName)).toEqual(['pier.png', 'dog.png']);
+    expect(project.photos[0]).toMatchObject({
+      rightCaption: 'Dawn',
+      date: '2024-08-01',
+      panX: 0.2,
+      panY: 0.7,
+      zoom: 1.2,
+      orientation: 'portrait',
+    });
+    expect(project.photos[1]).toMatchObject({
+      rightCaption: 'Harbor',
+      date: '2024-06-15T18:04:00',
+      panX: 0.15,
+      panY: 0.85,
+      zoom: 2,
+      orientation: 'landscape',
+    });
+    expect(await project.photos[0]?.source.text()).toBe('pier-bytes');
+    expect(await project.photos[1]?.source.text()).toBe('dog-bytes');
+  });
+
+  it('opens a project in its saved order and keeps the open photo', async () => {
+    const archive = await projectArchive(
+      [
+        projectPhoto(
+          'older.png',
+          'First',
+          '2020-01-02T08:30:00',
+          0.1,
+          0.2,
+          1.4,
+          'landscape',
+          'older',
+        ),
+        projectPhoto('newer.png', 'Second', '2024-05-06', 0.8, 0.3, 2, 'portrait', 'newer'),
+      ],
+      1,
+    );
+
+    TestBed.inject(ProjectActions).requestOpen();
+    await fixture.whenStable();
+    chooseFile(
+      projectInput(fixture),
+      new File([archive], 'ricordo-project.zip', { type: 'application/zip' }),
+    );
+
+    await vi.waitFor(() => {
+      expect(
+        currentSession(fixture)
+          .edits()
+          .map((edit) => edit.fileName),
+      ).toEqual(['older.png', 'newer.png']);
+    });
+    const session = currentSession(fixture);
+    expect(session.edits()[0]).toMatchObject({
+      rightCaption: 'First',
+      date: '2020-01-02T08:30:00',
+      panX: 0.1,
+      panY: 0.2,
+      zoom: 1.4,
+      orientation: 'landscape',
+    });
+    expect(session.edits()[1]).toMatchObject({
+      rightCaption: 'Second',
+      date: '2024-05-06',
+      panX: 0.8,
+      panY: 0.3,
+      zoom: 2,
+      orientation: 'portrait',
+    });
+    expect(session.activeId()).toBe(session.edits()[1]?.id);
+    await vi.waitFor(() => {
+      const caption = fixture.nativeElement.querySelector('#rightCaption');
+      expect(caption instanceof HTMLInputElement && caption.value).toBe('Second');
+    });
+    await vi.waitFor(() => {
+      expect(sessionImages.values.size).toBe(2);
+    });
+    const stored = await Promise.all([...sessionImages.values.values()].map((blob) => blob.text()));
+    expect(stored).toEqual(['older', 'newer']);
+  });
+
+  it('leaves the current photos in place when replacing a project is declined', async () => {
+    await loadPortrait(fixture);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const archive = await projectArchive(
+      [projectPhoto('other.png', 'Other', '2024-01-01', 0.5, 0.5, 1, 'landscape', 'other')],
+      0,
+    );
+
+    TestBed.inject(ProjectActions).requestOpen();
+    await fixture.whenStable();
+    chooseFile(
+      projectInput(fixture),
+      new File([archive], 'ricordo-project.zip', { type: 'application/zip' }),
+    );
+    await fixture.whenStable();
+
+    expect(confirm).toHaveBeenCalledWith('Replace the current photos with this project?');
+    expect(
+      currentSession(fixture)
+        .edits()
+        .map((edit) => edit.fileName),
+    ).toEqual(['dog.png']);
   });
 
   it('shares every current edit on a phone that can take the files', async () => {
@@ -1160,6 +1313,44 @@ function state(fixture: ComponentFixture<PhotoEditor>) {
 
 function fileInput(fixture: ComponentFixture<PhotoEditor>): HTMLInputElement {
   return fixture.nativeElement.querySelector('#photoFile');
+}
+
+function projectInput(fixture: ComponentFixture<PhotoEditor>): HTMLInputElement {
+  const input = fixture.nativeElement.querySelector('#projectFile');
+  if (!(input instanceof HTMLInputElement)) {
+    throw new Error('Missing project file input');
+  }
+  return input;
+}
+
+async function readProject(file: Blob) {
+  const project = await readProjectArchive(file);
+  if (!project) {
+    throw new Error('Missing project');
+  }
+  return project;
+}
+
+function projectPhoto(
+  fileName: string,
+  rightCaption: string,
+  date: string,
+  panX: number,
+  panY: number,
+  zoom: number,
+  orientation: ProjectPhoto['orientation'],
+  bytes: string,
+): ProjectPhoto {
+  return {
+    fileName,
+    rightCaption,
+    date,
+    panX,
+    panY,
+    zoom,
+    orientation,
+    source: new Blob([bytes], { type: 'image/png' }),
+  };
 }
 
 function text(fixture: ComponentFixture<PhotoEditor>): string {

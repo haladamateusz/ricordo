@@ -1,4 +1,4 @@
-import { zipStored } from './zip-store';
+import { readStoredZip, zipStored } from './zip-store';
 
 describe('zipStored', () => {
   it('packs stored files that can be read back', async () => {
@@ -12,9 +12,13 @@ describe('zipStored', () => {
 
     const bytes = new Uint8Array(await zip.arrayBuffer());
     expect(zip.type).toBe('application/zip');
-    expect(readStoredZip(bytes)).toEqual([
+    expect(readStoredNames(bytes)).toEqual([
       { name: 'crc.txt', text: '123456789' },
       { name: 'pier-framed.png', text: 'two' },
+    ]);
+    expect(readStoredZip(bytes)?.map((entry) => entry.name)).toEqual([
+      'crc.txt',
+      'pier-framed.png',
     ]);
     expect(bytes.subarray(14, 18)).toEqual(uint32(0xcbf43926));
   });
@@ -30,7 +34,7 @@ function uint32(value: number): Uint8Array {
   return bytes;
 }
 
-function readStoredZip(bytes: Uint8Array): { name: string; text: string }[] {
+function readStoredNames(bytes: Uint8Array): { name: string; text: string }[] {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const files: { name: string; text: string }[] = [];
   let offset = 0;

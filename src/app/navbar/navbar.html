@@ -13,6 +13,33 @@
       ricordo
     </a>
   </h1>
+  <div class="projects">
+    <button
+      type="button"
+      class="project"
+      [disabled]="actions.task() !== null || actions.downloadsBusy()"
+      [attr.aria-label]="'nav.open' | transloco"
+      (click)="actions.requestOpen()"
+    >
+      {{ 'nav.open' | transloco }}
+    </button>
+    <button
+      type="button"
+      class="project"
+      [disabled]="!actions.canExport() || actions.task() !== null || actions.downloadsBusy()"
+      [attr.aria-busy]="actions.task() === 'export' ? 'true' : null"
+      [attr.aria-label]="
+        actions.task() === 'export'
+          ? ('nav.exportingProject' | transloco)
+          : ('nav.export' | transloco)
+      "
+      (click)="actions.requestExport()"
+    >
+      {{
+        actions.task() === 'export' ? ('nav.exporting' | transloco) : ('nav.export' | transloco)
+      }}
+    </button>
+  </div>
   <div class="actions">
     <app-language-menu />
     <button

@@ -335,4 +335,13 @@
     multiple
     (change)="onFileSelected($event)"
   />
+  <input
+    #projectInput
+    id="projectFile"
+    class="sr-only"
+    type="file"
+    accept=".zip,application/zip"
+    [attr.aria-label]="'photo.file' | transloco"
+    (change)="onProjectSelected($event)"
+  />
 </div>
