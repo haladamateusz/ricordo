@@ -1,11 +1,11 @@
 <div class="sidebar-sheet">
   <div class="sidebar-titlebar">
-    <h2 id="edits-title" class="sidebar-title">Edits</h2>
+    <h2 id="edits-title" class="sidebar-title">{{ 'edits.title' | transloco }}</h2>
     <button
       #closeButton
       type="button"
       class="sidebar-close"
-      aria-label="Close edits"
+      [attr.aria-label]="'edits.close' | transloco"
       (click)="drawer.close()"
     >
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -19,7 +19,7 @@
     </button>
   </div>
   <div class="sidebar-head">
-    <div class="sidebar-tabs" role="tablist" aria-label="Edits" [attr.data-tab]="tab()">
+    <div class="sidebar-tabs" role="tablist" [attr.aria-label]="'edits.title' | transloco" [attr.data-tab]="tab()">
       <span class="sidebar-tab-indicator" aria-hidden="true"></span>
       <button
         #tabButton
@@ -33,7 +33,7 @@
         (click)="show('history')"
         (keydown)="onTabKey($event)"
       >
-        History
+        {{ 'edits.history' | transloco }}
       </button>
       <button
         #tabButton
@@ -47,7 +47,7 @@
         (click)="show('current')"
         (keydown)="onTabKey($event)"
       >
-        Current edits
+        {{ 'edits.current' | transloco }}
       </button>
     </div>
   </div>
@@ -63,7 +63,7 @@
         animate.leave="panel-leave-start"
       >
         @if (history.loaded() && history.edits().length === 0) {
-          <p class="history-empty">No saved edits yet</p>
+          <p class="history-empty">{{ 'edits.emptyHistory' | transloco }}</p>
         } @else if (history.edits().length > 0) {
           <div #historyScroll class="history-scroll">
             <div
@@ -113,12 +113,12 @@
       >
         <ng-content />
         @if (session.edits().length === 0) {
-          <p class="history-empty">No current edits</p>
+          <p class="history-empty">{{ 'edits.emptyCurrent' | transloco }}</p>
         } @else {
           <div class="current-toolbar">
             <p class="edit-count">
-              <span class="edit-count-label">Photo </span
-              ><span class="edit-count-value">{{ editPlace() }}</span> of
+              <span class="edit-count-label">{{ 'edits.photo' | transloco }} </span
+              ><span class="edit-count-value">{{ editPlace() }}</span> {{ 'edits.of' | transloco }}
               <span class="edit-count-value">{{ editTotal() }}</span>
             </p>
             <button
@@ -128,9 +128,15 @@
               [attr.aria-busy]="preparingDownloads() ? 'true' : null"
               (click)="downloadAll.emit()"
             >
-              {{ preparingDownloads() ? 'Preparing...' : 'Download all' }}
+              {{
+                preparingDownloads()
+                  ? ('edits.preparing' | transloco)
+                  : ('edits.downloadAll' | transloco)
+              }}
             </button>
-            <button type="button" class="sort-oldest" (click)="sortOldest()">Oldest first</button>
+            <button type="button" class="sort-oldest" (click)="sortOldest()">
+              {{ 'edits.oldest' | transloco }}
+            </button>
             @if (downloadNotice()) {
               <p class="download-notice" role="alert">{{ downloadNotice() }}</p>
             }
@@ -158,7 +164,7 @@
                     <button
                       type="button"
                       class="history-grip"
-                      [attr.aria-label]="'Reorder ' + rowLabel(edit)"
+                      [attr.aria-label]="reorderLabel(edit)"
                       [attr.aria-keyshortcuts]="'ArrowUp ArrowDown'"
                       (click)="onGripClick($event, edit)"
                       (keydown)="onReorderKey($event, edit)"

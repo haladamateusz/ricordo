@@ -4,6 +4,7 @@ import {
   Component,
   ElementRef,
   PLATFORM_ID,
+  afterRenderEffect,
   computed,
   effect,
   inject,
@@ -14,6 +15,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormValueControl } from '@angular/forms/signals';
+import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
 
 interface CalendarDateElement extends HTMLElement {
   value: string;
@@ -34,11 +36,16 @@ export function selectableYearCount(latestYear: number): number {
   return Math.max(latestYear - earliestYear, 0) * 2 + 1;
 }
 
-const captionDateFormat = new Intl.DateTimeFormat('pl', {
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-});
+const captionLocale = signal('en-GB');
+const captionFormats = new Map<string, Intl.DateTimeFormat>();
+
+export function setCaptionLocale(locale: string): void {
+  captionLocale.set(locale);
+}
+
+export function captionLocaleId(): string {
+  return captionLocale();
+}
 
 export function formatCaptionDate(value: string): string {
   const date = parseLocalDateValue(value);
@@ -47,7 +54,22 @@ export function formatCaptionDate(value: string): string {
     return '';
   }
 
-  return captionDateFormat.format(date);
+  return captionFormat(captionLocale()).format(date);
+}
+
+function captionFormat(locale: string): Intl.DateTimeFormat {
+  const existing = captionFormats.get(locale);
+  if (existing) {
+    return existing;
+  }
+
+  const format = new Intl.DateTimeFormat(locale, {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+  captionFormats.set(locale, format);
+  return format;
 }
 
 export function captionDateTime(value: string): number | null {
@@ -59,7 +81,9 @@ export function keepCaptionTime(nextDate: string, current: string): string {
   return time ? `${nextDate}T${time}` : nextDate;
 }
 
-export const longestCaptionDate = formatCaptionDate('2025-10-31');
+export function longestCaptionDate(): string {
+  return formatCaptionDate('2025-10-31');
+}
 
 function parseLocalDateValue(value: string): Date | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}):(\d{2}))?$/.exec(value.trim());
@@ -108,6 +132,7 @@ function captionClock(value: string): string | null {
   selector: 'app-date-picker',
   templateUrl: './date-picker.html',
   styleUrl: './date-picker.css',
+  imports: [TranslocoPipe],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   host: {
     '(document:pointerdown)': 'onDocumentPointerDown($event)',
@@ -121,6 +146,7 @@ function captionClock(value: string): string | null {
 export class DatePicker implements FormValueControl<string> {
   private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly platformId = inject(PLATFORM_ID);
+  private readonly transloco = inject(TranslocoService);
   private readonly isBrowser = isPlatformBrowser(this.platformId);
   private readonly trigger = viewChild<ElementRef<HTMLButtonElement>>('trigger');
   private readonly calendar = viewChild<ElementRef<CalendarDateElement>>('calendar');
@@ -138,6 +164,7 @@ export class DatePicker implements FormValueControl<string> {
   protected readonly maxDate = signal(toLocalIsoDate(new Date()));
   protected readonly yearCount = signal(selectableYearCount(new Date().getFullYear()));
   protected readonly panelId = computed(() => `${this.controlId()}-dialog`);
+  protected readonly calendarLocale = computed(() => captionLocaleId());
   protected readonly displayValue = computed(
     () => formatCaptionDate(this.value()) || this.placeholder(),
   );
@@ -159,6 +186,42 @@ export class DatePicker implements FormValueControl<string> {
         this.focusCalendar();
       });
     }
+
+    afterRenderEffect((onCleanup) => {
+      const lang = this.transloco.activeLang();
+      const calendar = this.calendar()?.nativeElement;
+      if (!calendar) {
+        return;
+      }
+
+      let frame = 0;
+      let attempts = 0;
+      const apply = (): void => {
+        if (this.transloco.getActiveLang() !== lang || this.labelCalendar(calendar)) {
+          return;
+        }
+        if (attempts >= 8) {
+          return;
+        }
+        attempts += 1;
+        frame = requestAnimationFrame(apply);
+      };
+      apply();
+      onCleanup(() => cancelAnimationFrame(frame));
+    });
+  }
+
+  private labelCalendar(calendar: HTMLElement): boolean {
+    const root = calendar.shadowRoot;
+    const previous = root?.querySelector('button[part~="previous"]');
+    const next = root?.querySelector('button[part~="next"]');
+    if (!previous || !next) {
+      return false;
+    }
+
+    previous.setAttribute('aria-label', this.transloco.translate('date.previous'));
+    next.setAttribute('aria-label', this.transloco.translate('date.next'));
+    return true;
   }
 
   protected toggle(): void {

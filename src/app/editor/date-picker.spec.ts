@@ -1,18 +1,30 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { provideAppTranslations } from '../i18n/provide-app-translations';
 import {
   DatePicker,
   captionDateTime,
   formatCaptionDate,
   keepCaptionTime,
   selectableYearCount,
+  setCaptionLocale,
   toLocalIsoDate,
 } from './date-picker';
 
 describe('formatCaptionDate', () => {
+  beforeEach(() => {
+    setCaptionLocale('en-GB');
+  });
+
+  it('prints a selected date in English', () => {
+    expect(formatCaptionDate('2026-09-12')).toBe('12 September 2026');
+    expect(formatCaptionDate('1999-01-03')).toBe('3 January 1999');
+    expect(formatCaptionDate('2025-10-31')).toBe('31 October 2025');
+  });
+
   it('prints a selected date in Polish', () => {
+    setCaptionLocale('pl');
     expect(formatCaptionDate('2026-09-12')).toBe('12 września 2026');
-    expect(formatCaptionDate('1999-01-03')).toBe('3 stycznia 1999');
     expect(formatCaptionDate('2025-10-31')).toBe('31 października 2025');
   });
 
@@ -22,7 +34,7 @@ describe('formatCaptionDate', () => {
   });
 
   it('prints a capture time as its calendar day', () => {
-    expect(formatCaptionDate('2024-06-15T10:30:00')).toBe('15 czerwca 2024');
+    expect(formatCaptionDate('2024-06-15T10:30:00')).toBe('15 June 2024');
   });
 });
 
@@ -50,8 +62,10 @@ describe('DatePicker', () => {
   let fixture: ComponentFixture<DatePicker>;
 
   beforeEach(async () => {
+    localStorage.removeItem('ricordo.language');
     await TestBed.configureTestingModule({
       imports: [DatePicker],
+      providers: [provideAppTranslations()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DatePicker);

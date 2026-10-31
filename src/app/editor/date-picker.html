@@ -24,37 +24,44 @@
 </button>
 
 @if (isOpen()) {
-  <div [id]="panelId()" class="date-picker__dialog" role="dialog" aria-label="Choose date">
+  <div
+    [id]="panelId()"
+    class="date-picker__dialog"
+    role="dialog"
+    [attr.aria-label]="'date.choose' | transloco"
+  >
     @if (isCalendarReady()) {
       <calendar-date
         #calendar
         [value]="calendarDate()"
         [min]="earliestDate"
         [max]="maxDate()"
-        locale="pl"
+        [attr.locale]="calendarLocale()"
         first-day-of-week="1"
         show-outside-days
         (change)="selectDate($event)"
       >
-        <svg slot="previous" viewBox="0 0 20 20" fill="currentColor" aria-label="Previous month">
+        <svg slot="previous" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
           <path
             fill-rule="evenodd"
             d="M11.78 4.47a.75.75 0 0 1 0 1.06L7.31 10l4.47 4.47a.75.75 0 1 1-1.06 1.06l-5-5a.75.75 0 0 1 0-1.06l5-5a.75.75 0 0 1 1.06 0Z"
             clip-rule="evenodd"
           />
         </svg>
-        <svg slot="next" viewBox="0 0 20 20" fill="currentColor" aria-label="Next month">
+        <svg slot="next" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
           <path
             fill-rule="evenodd"
             d="M8.22 4.47a.75.75 0 0 1 1.06 0l5 5a.75.75 0 0 1 0 1.06l-5 5a.75.75 0 0 1-1.06-1.06L12.69 10 8.22 5.53a.75.75 0 0 1 0-1.06Z"
             clip-rule="evenodd"
           />
         </svg>
-        <calendar-select-year slot="heading" [attr.max-years]="yearCount()" />
+        <calendar-select-year slot="heading" [attr.max-years]="yearCount()">
+          <span slot="label">{{ 'date.year' | transloco }}</span>
+        </calendar-select-year>
         <calendar-month />
       </calendar-date>
     } @else {
-      <div class="date-picker__loading" role="status">Loading calendar...</div>
+      <div class="date-picker__loading" role="status">{{ 'date.loading' | transloco }}</div>
     }
   </div>
 }

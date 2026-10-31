@@ -1,10 +1,14 @@
-import { longestCaptionDate } from './date-picker';
+import { longestCaptionDate, setCaptionLocale } from './date-picker';
 import { buildFrameLayout, captionFontScale, captionGapMm, mmToPx } from './frame-layout';
 import { paintFrame } from './frame-renderer';
 
 describe('paintFrame', () => {
   const layout = buildFrameLayout('landscape');
   const image = {} as CanvasImageSource;
+
+  beforeEach(() => {
+    setCaptionLocale('en-GB');
+  });
 
   it('paints the Polish date on the left and the right caption on the image edge', () => {
     const { context, captions } = recordingContext();
@@ -39,9 +43,9 @@ describe('paintFrame', () => {
     const { context, captions, fonts } = recordingContext();
     const rightCaption = 'a'.repeat(400);
 
-    paintFrame(context, image, 4000, 2000, layout, 0.5, 0.5, 1, longestCaptionDate, rightCaption);
+    paintFrame(context, image, 4000, 2000, layout, 0.5, 0.5, 1, longestCaptionDate(), rightCaption);
 
-    const dateSlot = longestCaptionDate.length * 8;
+    const dateSlot = longestCaptionDate().length * 8;
     const rightMax = layout.photo.width - dateSlot - Math.round(mmToPx(captionGapMm));
     const rightScale = captionFontScale(rightCaption.length * 8, rightMax);
 
@@ -55,13 +59,13 @@ describe('paintFrame', () => {
     const { context, fonts } = recordingContext();
     const portrait = buildFrameLayout('portrait');
     const date = '31 lipca 2025';
-    const rightCaption = 'x'.repeat(104);
+    const rightCaption = 'x'.repeat(106);
 
     paintFrame(context, image, 2000, 4000, portrait, 0.5, 0.5, 1, date, rightCaption);
 
     const gap = Math.round(mmToPx(captionGapMm));
     const besideDate = portrait.photo.width - date.length * 8 - gap;
-    const besideLongest = portrait.photo.width - longestCaptionDate.length * 8 - gap;
+    const besideLongest = portrait.photo.width - longestCaptionDate().length * 8 - gap;
 
     expect(rightCaption.length * 8).toBeGreaterThan(besideLongest);
     expect(rightCaption.length * 8).toBeLessThanOrEqual(besideDate);

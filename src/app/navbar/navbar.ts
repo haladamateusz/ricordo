@@ -1,10 +1,11 @@
 import { Component, ElementRef, effect, inject, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { TranslocoPipe } from '@jsverse/transloco';
 
 import { EditDrawer } from '../editor/edit-drawer';
 
 @Component({
-  imports: [RouterLink],
+  imports: [RouterLink, TranslocoPipe],
   selector: 'app-navbar',
   styleUrl: './navbar.css',
   templateUrl: './navbar.html',

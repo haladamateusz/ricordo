@@ -11,6 +11,7 @@ import {
   type FileHandleDb,
   type StoredFileHandle,
 } from './edit-history';
+import { provideAppTranslations } from '../i18n/provide-app-translations';
 import { CurrentSession } from './current-session';
 import { EditDrawer } from './edit-drawer';
 import { EditHistoryList } from './edit-history-list';
@@ -21,6 +22,7 @@ describe('EditHistoryList', () => {
   let images: MemoryImages;
 
   beforeEach(() => {
+    localStorage.removeItem('ricordo.language');
     lists = new MemoryEditList();
     handles = new MemoryHandles();
     images = new MemoryImages();
@@ -52,7 +54,7 @@ describe('EditHistoryList', () => {
       );
     });
     expect(fixture.nativeElement.querySelector('.history-date')?.textContent).toBe(
-      '15 czerwca 2024',
+      '15 June 2024',
     );
   });
 
@@ -171,7 +173,7 @@ describe('EditHistoryList', () => {
       );
     });
     expect(fixture.nativeElement.querySelector('.history-date')?.textContent).toBe(
-      '15 czerwca 2024',
+      '15 June 2024',
     );
     expect(fixture.nativeElement.querySelector('.history-open')?.getAttribute('aria-current')).toBe(
       'true',
@@ -208,7 +210,7 @@ describe('EditHistoryList', () => {
     });
     const opener = fixture.nativeElement.querySelector('.history-open') as HTMLButtonElement;
     expect(opener.getAttribute('aria-label')).toBe(
-      'Cafe terrace overlooking the harbor, 15 czerwca 2024',
+      'Cafe terrace overlooking the harbor, 15 June 2024',
     );
     expect(opener.textContent).toContain('Cafe terrace overloo...');
   });
@@ -616,6 +618,7 @@ describe('EditHistoryList', () => {
         { provide: FILE_HANDLE_DB, useValue: handles },
         { provide: EDIT_IMAGE_DB, useValue: images },
         CurrentSession,
+        provideAppTranslations(),
       ],
     }).compileComponents();
 

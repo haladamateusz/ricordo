@@ -53,7 +53,7 @@ export function paintFrame(
   ctx.fillStyle = '#000000';
   ctx.textBaseline = 'middle';
   ctx.font = `400 ${layout.captionFontSizePx}px ${CAPTION_FONT_FAMILY}`;
-  const dateSlot = Math.ceil(ctx.measureText(longestCaptionDate).width);
+  const dateSlot = Math.ceil(ctx.measureText(longestCaptionDate()).width);
   const captionGap = Math.round(mmToPx(captionGapMm));
   const dateText = leftCaption.trim();
   const dateWidth =

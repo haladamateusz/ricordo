@@ -13,6 +13,7 @@ import {
   viewChildren,
 } from '@angular/core';
 import { injectVirtualizer } from '@tanstack/angular-virtual';
+import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
 
 import { CurrentSession, type CurrentEdit } from './current-session';
 import { formatCaptionDate } from './date-picker';
@@ -21,13 +22,19 @@ import { EditHistory, type StoredEdit } from './edit-history';
 
 export const historyRowHeight = 88;
 
+interface EditStatus {
+  key: string;
+  params: Record<string, string | number>;
+}
+
 @Component({
   selector: 'app-edit-history-list',
+  imports: [TranslocoPipe],
   templateUrl: './edit-history-list.html',
   styleUrl: './edit-history-list.css',
   host: {
     id: 'edits-dialog',
-    'aria-label': 'Edits',
+    '[attr.aria-label]': 'editsLabel()',
     '[attr.role]': 'drawer.open() ? "dialog" : "region"',
     '[attr.aria-modal]': 'drawer.open() ? "true" : null',
     '[class.is-switching]': 'switching()',
@@ -53,7 +60,21 @@ export class EditHistoryList {
   readonly preparingDownloads = input(false);
   readonly downloadNotice = input('');
 
+  private readonly transloco = inject(TranslocoService);
   protected readonly tab = signal<'history' | 'current'>('history');
+  private readonly status = signal<EditStatus | null>(null);
+  protected readonly editsLabel = computed(() => {
+    this.transloco.activeLang();
+    return this.transloco.translate('edits.title');
+  });
+  protected readonly reorderStatus = computed(() => {
+    this.transloco.activeLang();
+    const status = this.status();
+    if (!status) {
+      return '';
+    }
+    return this.transloco.translate(status.key, status.params);
+  });
   protected readonly switching = signal(false);
   protected readonly drawer = inject(EditDrawer);
   protected readonly history = inject(EditHistory);
@@ -63,7 +84,6 @@ export class EditHistoryList {
   protected readonly picked = signal<ReadonlySet<string>>(new Set());
   protected readonly draggingId = signal<string | null>(null);
   protected readonly draggingIds = signal<readonly string[]>([]);
-  protected readonly reorderStatus = signal('');
   private readonly dragTop = signal<number | null>(null);
   private reorder: ReorderDrag | null = null;
   private clickStop: ((event: Event) => void) | null = null;
@@ -128,8 +148,9 @@ export class EditHistoryList {
   }
 
   protected rowLabel(edit: { rightCaption: string; date: string }): string {
-    const caption = edit.rightCaption.trim() || 'No caption';
-    const date = this.formatDate(edit.date) || 'No date';
+    this.transloco.activeLang();
+    const caption = edit.rightCaption.trim() || this.transloco.translate('edits.noCaption');
+    const date = this.formatDate(edit.date) || this.transloco.translate('edits.noDate');
     return `${caption}, ${date}`;
   }
 
@@ -172,10 +193,10 @@ export class EditHistoryList {
     if (scroll && changed) {
       scroll.scrollTop = 0;
     }
-    this.reorderStatus.set(
+    this.status.set(
       changed
-        ? 'Current edits sorted from oldest to newest.'
-        : 'Current edits are already oldest first.',
+        ? { key: 'edits.sorted', params: {} }
+        : { key: 'edits.alreadySorted', params: {} },
     );
     if (changed) {
       this.reordered.emit();
@@ -209,7 +230,12 @@ export class EditHistoryList {
   }
 
   protected pickedLabel(edit: CurrentEdit): string {
-    return this.isPicked(edit.id) ? `${this.rowLabel(edit)}, selected` : this.rowLabel(edit);
+    const label = this.rowLabel(edit);
+    return this.isPicked(edit.id) ? this.transloco.translate('edits.selected', { label }) : label;
+  }
+
+  protected reorderLabel(edit: CurrentEdit): string {
+    return this.transloco.translate('edits.reorder', { label: this.rowLabel(edit) });
   }
 
   protected currentKey(index: number): string {
@@ -396,10 +422,10 @@ export class EditHistoryList {
     }
     this.picked.set(next);
     const label = this.rowLabel(edit);
-    const status = next.has(id)
-      ? `${label} selected. ${next.size} selected.`
-      : `${label} unselected. ${next.size} selected.`;
-    this.reorderStatus.set(status);
+    this.status.set({
+      key: next.has(id) ? 'edits.picked' : 'edits.unpicked',
+      params: { label, count: next.size },
+    });
   }
 
   private announceMove(ids: readonly string[]): void {
@@ -414,9 +440,10 @@ export class EditHistoryList {
       if (first === undefined || last === undefined) {
         return;
       }
-      this.reorderStatus.set(
-        `${ids.length} edits moved together to positions ${first + 1} through ${last + 1}.`,
-      );
+      this.status.set({
+        key: 'edits.movedGroup',
+        params: { count: ids.length, from: first + 1, to: last + 1 },
+      });
       return;
     }
 
@@ -425,9 +452,10 @@ export class EditHistoryList {
     if (!edit) {
       return;
     }
-    this.reorderStatus.set(
-      `${this.rowLabel(edit)} moved to position ${index + 1} of ${edits.length}.`,
-    );
+    this.status.set({
+      key: 'edits.moved',
+      params: { label: this.rowLabel(edit), position: index + 1, total: edits.length },
+    });
   }
 
   private swallowFollowingClick(): void {

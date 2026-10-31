@@ -22,6 +22,7 @@ import {
   type SessionListDb,
   type StoredSession,
 } from './current-session-store';
+import { provideAppTranslations } from '../i18n/provide-app-translations';
 import { PhotoEditor } from './photo-editor';
 import { heicWithExifDate, jpegWithExifDate } from './photo-exif-fixture';
 import { PHOTO_FILE_PICKER, type PhotoSelection } from './photo-file-picker';
@@ -39,6 +40,7 @@ describe('PhotoEditor', () => {
   let sessionHandles: MemoryHandles;
 
   beforeEach(async () => {
+    localStorage.removeItem('ricordo.language');
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:photo');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     vi.stubGlobal('Image', FakeImage);
@@ -65,6 +67,7 @@ describe('PhotoEditor', () => {
         { provide: SESSION_LIST_DB, useValue: sessionLists },
         { provide: SESSION_IMAGE_DB, useValue: sessionImages },
         { provide: SESSION_HANDLE_DB, useValue: sessionHandles },
+        provideAppTranslations(),
       ],
     }).compileComponents();
 
@@ -130,7 +133,7 @@ describe('PhotoEditor', () => {
     );
 
     await vi.waitFor(() => {
-      expect(text(fixture)).toContain('15 czerwca 2024');
+      expect(text(fixture)).toContain('15 June 2024');
     });
   });
 
@@ -141,7 +144,7 @@ describe('PhotoEditor', () => {
     );
 
     await vi.waitFor(() => {
-      expect(text(fixture)).toContain('2 stycznia 2023');
+      expect(text(fixture)).toContain('2 January 2023');
     });
 
     expect(decodeHeic).not.toHaveBeenCalled();
@@ -158,7 +161,7 @@ describe('PhotoEditor', () => {
     );
 
     await vi.waitFor(() => {
-      expect(text(fixture)).toContain('2 stycznia 2023');
+      expect(text(fixture)).toContain('2 January 2023');
     });
 
     expect(decodeHeic).toHaveBeenCalledOnce();
@@ -175,7 +178,7 @@ describe('PhotoEditor', () => {
     );
 
     await vi.waitFor(() => {
-      expect(text(fixture)).toContain('2 stycznia 2023');
+      expect(text(fixture)).toContain('2 January 2023');
     });
     expect(text(fixture)).toContain(
       'This browser cannot display HEIC photos. The created date was filled in from the file.',
@@ -198,8 +201,8 @@ describe('PhotoEditor', () => {
       expect(text(fixture)).toContain('This browser cannot display HEIC photos.');
     });
 
-    expect(text(fixture)).toContain('12 września 2026');
-    expect(text(fixture)).not.toContain('2 stycznia 2023');
+    expect(text(fixture)).toContain('12 September 2026');
+    expect(text(fixture)).not.toContain('2 January 2023');
     expect(text(fixture)).toContain('Remove');
   });
 
@@ -209,7 +212,7 @@ describe('PhotoEditor', () => {
 
     const captionInput = fixture.nativeElement.querySelector('#rightCaption') as HTMLInputElement;
     expect(captionInput.value).toBe('');
-    expect(text(fixture)).not.toContain('12 września 2026');
+    expect(text(fixture)).not.toContain('12 September 2026');
     expect(currentSession(fixture).edits()[0]).toMatchObject({ rightCaption: '', date: '' });
   });
 
@@ -221,11 +224,11 @@ describe('PhotoEditor', () => {
     );
 
     await vi.waitFor(() => {
-      expect(text(fixture)).toContain('15 czerwca 2024');
+      expect(text(fixture)).toContain('15 June 2024');
     });
     const captionInput = fixture.nativeElement.querySelector('#rightCaption') as HTMLInputElement;
     expect(captionInput.value).toBe('');
-    expect(text(fixture)).not.toContain('12 września 2026');
+    expect(text(fixture)).not.toContain('12 September 2026');
   });
 
   it('returns to the empty editor when the last current edit is removed', async () => {
@@ -239,7 +242,7 @@ describe('PhotoEditor', () => {
     expect(currentSession(fixture).edits()).toEqual([]);
     expect(state(fixture).photo()).toBeNull();
     expect(text(fixture)).toContain('Choose a photo');
-    expect(text(fixture)).not.toContain('12 września 2026');
+    expect(text(fixture)).not.toContain('12 September 2026');
     expect(text(fixture)).toContain('No current edits');
     const captionInput = fixture.nativeElement.querySelector('#rightCaption') as HTMLInputElement;
     const dateButton = fixture.nativeElement.querySelector('#captionDate') as HTMLButtonElement;
@@ -273,7 +276,7 @@ describe('PhotoEditor', () => {
     expect(session.edits().map((edit) => edit.fileName)).toEqual(['harbor.png']);
     expect(session.activeId()).toBe(olderId);
     expect(text(fixture)).toContain('harbor.png');
-    expect(text(fixture)).toContain('15 czerwca 2024');
+    expect(text(fixture)).toContain('15 June 2024');
     expect(text(fixture)).not.toContain('pier.png');
     const captionInput = fixture.nativeElement.querySelector('#rightCaption') as HTMLInputElement;
     expect(captionInput.value).toBe('Harbor');
@@ -334,7 +337,7 @@ describe('PhotoEditor', () => {
     await vi.waitFor(() => {
       expect(caption(fixture)).toBe('Right caption text');
     });
-    expect(historyDate(fixture)).toBe('15 czerwca 2024');
+    expect(historyDate(fixture)).toBe('15 June 2024');
     expect(handles.values.size).toBe(1);
   });
 
@@ -595,9 +598,9 @@ describe('PhotoEditor', () => {
     button(fixture, 'Replace').click();
 
     await vi.waitFor(() => {
-      expect(text(fixture)).toContain('2 stycznia 2023');
+      expect(text(fixture)).toContain('2 January 2023');
     });
-    expect(text(fixture)).not.toContain('12 września 2026');
+    expect(text(fixture)).not.toContain('12 September 2026');
     expect(currentSession(fixture).edits()[0]).toMatchObject({
       fileName: 'pier.jpg',
       date: '2023-01-02T08:00:00',
@@ -728,7 +731,7 @@ describe('PhotoEditor', () => {
     });
     const captionInput = fixture.nativeElement.querySelector('#rightCaption') as HTMLInputElement;
     expect(captionInput.value).toBe('Pier light');
-    expect(text(fixture)).toContain('15 czerwca 2024');
+    expect(text(fixture)).toContain('15 June 2024');
     expect(state(fixture).pan()).toEqual({ x: 0.25, y: 0.8 });
     expect(state(fixture).zoom()).toBe(2);
     expect(state(fixture).orientation()).toBe('portrait');
@@ -962,6 +965,7 @@ describe('PhotoEditor stored session', () => {
   let sessionImages: MemoryImages;
 
   beforeEach(async () => {
+    localStorage.removeItem('ricordo.language');
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:photo');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     vi.stubGlobal('Image', FakeImage);
@@ -989,6 +993,7 @@ describe('PhotoEditor stored session', () => {
         { provide: SESSION_LIST_DB, useValue: sessionLists },
         { provide: SESSION_IMAGE_DB, useValue: sessionImages },
         { provide: SESSION_HANDLE_DB, useValue: new MemoryHandles() },
+        provideAppTranslations(),
       ],
     }).compileComponents();
 

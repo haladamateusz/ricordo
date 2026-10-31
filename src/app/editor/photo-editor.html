@@ -12,7 +12,7 @@
       [attr.aria-busy]="restoring() ? 'true' : null"
       (keydown)="onRestoreKey($event)"
     >
-      <h2 id="restore-title">Restore previous session?</h2>
+      <h2 id="restore-title">{{ 'restore.title' | transloco }}</h2>
       <p id="restore-copy">{{ restoreSummary() }}</p>
       <ul id="restore-files" class="sr-only">
         @for (edit of offer.edits; track edit.id) {
@@ -57,7 +57,7 @@
           [disabled]="restoring()"
           (click)="restoreSession()"
         >
-          {{ restoring() ? 'Restoring...' : 'Restore session' }}
+          {{ restoring() ? ('restore.working' | transloco) : ('restore.action' | transloco) }}
         </button>
         <button
           type="button"
@@ -65,7 +65,7 @@
           [disabled]="restoring()"
           (click)="startFresh()"
         >
-          Start from scratch
+          {{ 'restore.fresh' | transloco }}
         </button>
       </div>
     </div>
@@ -118,10 +118,10 @@
             />
           </svg>
         </span>
-        <strong>{{ loadingCount() > 0 ? loadingLabel() : 'Choose a photo' }}</strong>
-        <span id="current-photo-hint" class="photo-hint"
-          >JPEG, PNG, WebP, or HEIC. You can also drop files here.</span
-        >
+        <strong>{{
+          loadingCount() > 0 ? loadingLabel() : ('photo.choose' | transloco)
+        }}</strong>
+        <span id="current-photo-hint" class="photo-hint">{{ 'photo.hint' | transloco }}</span>
       </button>
     }
   </app-edit-history-list>
@@ -138,20 +138,20 @@
     >
       <div class="fields">
         <div class="field">
-          <label class="sr-only" for="captionDate">Date</label>
+          <label class="sr-only" for="captionDate">{{ 'photo.date' | transloco }}</label>
           <app-date-picker
             controlId="captionDate"
-            placeholder="Select date"
+            [placeholder]="'photo.selectDate' | transloco"
             [formField]="captionForm.left"
           />
         </div>
         <div class="field">
-          <label class="sr-only" for="rightCaption">Right caption</label>
+          <label class="sr-only" for="rightCaption">{{ 'photo.rightCaption' | transloco }}</label>
           <input
             id="rightCaption"
             type="text"
             autocomplete="off"
-            placeholder="Right caption"
+            [placeholder]="'photo.rightCaption' | transloco"
             [formField]="captionForm.right"
           />
         </div>
@@ -204,7 +204,7 @@
                     stroke-linejoin="round"
                   />
                 </svg>
-                Replace
+                {{ 'photo.replace' | transloco }}
               </button>
               <button
                 type="button"
@@ -234,7 +234,7 @@
                     stroke-width="1.8"
                   />
                 </svg>
-                Orientation
+                {{ 'photo.orientation' | transloco }}
               </button>
               <button
                 type="button"
@@ -250,7 +250,7 @@
                     stroke-linejoin="round"
                   />
                 </svg>
-                Remove
+                {{ 'photo.remove' | transloco }}
               </button>
             </div>
           </div>
@@ -290,10 +290,10 @@
               />
             </svg>
           </span>
-          <strong>{{ loadingCount() > 0 ? loadingLabel() : 'Choose a photo' }}</strong>
-          <span id="photo-hint" class="photo-hint"
-            >JPEG, PNG, WebP, or HEIC. You can also drop files here.</span
-          >
+          <strong>{{
+            loadingCount() > 0 ? loadingLabel() : ('photo.choose' | transloco)
+          }}</strong>
+          <span id="photo-hint" class="photo-hint">{{ 'photo.hint' | transloco }}</span>
         </button>
       }
 
@@ -313,7 +313,7 @@
               stroke-linejoin="round"
             />
           </svg>
-          Download
+          {{ 'photo.download' | transloco }}
         </button>
       </div>
       <div

@@ -11,6 +11,9 @@ import {
   viewChild,
 } from '@angular/core';
 import { disabled, form, FormField } from '@angular/forms/signals';
+import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
+
+import { pluralForm, type LanguageId } from '../i18n/languages';
 
 import { CurrentSession, type CurrentEdit } from './current-session';
 import { CurrentSessionStore, type SessionEdit, type StoredSession } from './current-session-store';
@@ -122,7 +125,7 @@ const restorePreviewLimit = 4;
 
 @Component({
   selector: 'app-photo-editor',
-  imports: [FormField, DatePicker, EditHistoryList],
+  imports: [FormField, DatePicker, EditHistoryList, TranslocoPipe],
   templateUrl: './photo-editor.html',
   styleUrl: './photo-editor.css',
   providers: [CurrentSession],
@@ -152,10 +155,14 @@ export class PhotoEditor {
   protected readonly dragging = signal(false);
   protected readonly dragOver = signal(false);
   protected readonly currentDragOver = signal(false);
-  protected readonly errorMessage = signal('');
+  private readonly transloco = inject(TranslocoService);
+  private readonly errorKey = signal<TextMessage | null>(null);
+  private readonly downloadKey = signal<TextMessage | null>(null);
+  private readonly milestone = signal<RestoreMilestone | null>(null);
+  protected readonly errorMessage = computed(() => this.translateMessage(this.errorKey()));
   protected readonly pendingMessage = signal('');
   protected readonly preparingDownloads = signal(false);
-  protected readonly downloadNotice = signal('');
+  protected readonly downloadNotice = computed(() => this.translateMessage(this.downloadKey()));
   protected readonly loadingCount = signal(0);
   private batchId = 0;
   protected readonly fontReady = signal(false);
@@ -172,8 +179,7 @@ export class PhotoEditor {
   protected readonly restoreOffer = signal<RestoreOffer | null>(null);
   protected readonly restoreSummary = computed(() => {
     const count = this.restoreOffer()?.edits.length ?? 0;
-    const photos = count === 1 ? '1 photo' : `${count} photos`;
-    return `You have ${photos} from your last visit.`;
+    return this.transloco.translate(`restore.summary.${this.plural(count)}`, { count });
   });
   protected readonly restorePreview = computed(
     () => this.restoreOffer()?.edits.slice(0, restorePreviewLimit) ?? [],
@@ -186,8 +192,7 @@ export class PhotoEditor {
   protected readonly restoreStatus = computed(() => {
     const total = this.restoreTotal();
     const done = Math.min(this.restoreDone(), total);
-    const photos = total === 1 ? 'photo' : 'photos';
-    return `Restoring ${done} of ${total} ${photos}`;
+    return this.transloco.translate(`restore.progress.${this.plural(total)}`, { done, total });
   });
   protected readonly restoreFraction = computed(() => {
     const total = this.restoreTotal();
@@ -196,20 +201,36 @@ export class PhotoEditor {
     }
     return Math.min(this.restoreDone(), total) / total;
   });
-  protected readonly restoreMilestone = signal('');
+  protected readonly restoreMilestone = computed(() => {
+    const current = this.milestone();
+    if (!current) {
+      return '';
+    }
+    return this.transloco.translate(`restore.${current.kind}.${this.plural(current.total)}`, {
+      done: current.done,
+      total: current.total,
+    });
+  });
   private readonly loadingDone = signal(0);
   protected readonly loadingLabel = computed(() => {
     const total = this.loadingCount();
-    const word = total === 1 ? 'Loading image' : 'Loading images';
-    return `${word} (${this.loadingDone()}/${total})`;
+    return this.transloco.translate(`loading.${this.plural(total)}`, {
+      done: this.loadingDone(),
+      total,
+    });
   });
   protected readonly runnerBands = loadingRunnerBands;
   protected readonly runnerLines = loadingRunnerLines;
 
   protected readonly orientation = signal<Orientation>('landscape');
-  protected readonly orientationLabel = computed(() =>
-    this.orientation() === 'portrait' ? 'Orientation to 15 by 10' : 'Orientation to 10 by 15',
-  );
+  protected readonly orientationLabel = computed(() => {
+    this.transloco.activeLang();
+    const portrait = this.orientation() === 'portrait';
+    return this.transloco.translate('photo.orientationTo', {
+      width: portrait ? 15 : 10,
+      height: portrait ? 10 : 15,
+    });
+  });
   protected readonly orientationIcon = computed(() =>
     this.orientation() === 'portrait'
       ? { back: portraitGlyph, front: landscapeGlyph }
@@ -224,8 +245,10 @@ export class PhotoEditor {
   });
 
   protected readonly stageLabel = computed(() => {
-    const fileName = this.photo()?.fileName ?? 'photo';
-    return `Framed photo, ${fileName}. Drag or use arrow keys to reposition. Scroll to scale.`;
+    this.transloco.activeLang();
+    return this.transloco.translate('photo.stage', {
+      fileName: this.photo()?.fileName ?? 'photo',
+    });
   });
 
   protected readonly frameRatio = computed(() => {
@@ -626,7 +649,7 @@ export class PhotoEditor {
       this.zoom.set(1);
       this.captionModel.set({ left: '', right: '' });
       this.committedKey = this.draftKey();
-      this.errorMessage.set('');
+      this.errorKey.set(null);
       this.pendingMessage.set('');
       this.persistSession();
       return;
@@ -648,7 +671,7 @@ export class PhotoEditor {
     try {
       blob = blobFromDataUrl(canvas.toDataURL('image/png'));
     } catch {
-      this.errorMessage.set('The framed photo could not be created.');
+      this.errorKey.set({ key: 'error.frame' });
       return;
     }
 
@@ -711,7 +734,7 @@ export class PhotoEditor {
   }
 
   protected openCurrentEdit(edit: CurrentEdit): void {
-    this.errorMessage.set('');
+    this.errorKey.set(null);
     this.pendingMessage.set('');
     this.session.activate(edit.id);
     this.photo.set({
@@ -738,7 +761,7 @@ export class PhotoEditor {
     }
 
     if (!image) {
-      this.errorMessage.set('That saved photo could not be opened.');
+      this.errorKey.set({ key: 'error.saved' });
       return;
     }
 
@@ -800,7 +823,7 @@ export class PhotoEditor {
     const accepted = picked.filter((item) => isAcceptedPhoto(item.file));
     if (picked.length > 0 && accepted.length === 0) {
       this.pendingMessage.set('');
-      this.errorMessage.set('Please choose a JPEG, PNG, WebP, or HEIC image.');
+      this.errorKey.set({ key: 'error.fileType' });
       return;
     }
 
@@ -808,7 +831,7 @@ export class PhotoEditor {
     this.loadingDone.set(0);
     this.loadingCount.set(accepted.length);
     this.pendingMessage.set('');
-    this.errorMessage.set('');
+    this.errorKey.set(null);
     const drafts: IncomingPhoto[] = [];
     let failedHeicDate: string | null | undefined;
 
@@ -832,7 +855,7 @@ export class PhotoEditor {
       if (result.heic) {
         failedHeicDate = result.date;
       }
-      this.errorMessage.set(incomingError(result, false));
+      this.errorKey.set(incomingError(result, false));
     }
 
     if (batchId !== this.batchId) {
@@ -845,7 +868,7 @@ export class PhotoEditor {
       if (failedHeicDate !== undefined && this.photo() === null) {
         this.captionModel.update((current) => ({ ...current, right: '' }));
         this.useCreatedDate(failedHeicDate, this.loadId);
-        this.errorMessage.set(
+        this.errorKey.set(
           incomingError({ kind: 'failure', heic: true, date: failedHeicDate }, true),
         );
       }
@@ -931,7 +954,7 @@ export class PhotoEditor {
   ): Promise<void> {
     if (!isAcceptedPhoto(file)) {
       this.pendingMessage.set('');
-      this.errorMessage.set('Please choose a JPEG, PNG, WebP, or HEIC image.');
+      this.errorKey.set({ key: 'error.fileType' });
       return;
     }
 
@@ -940,7 +963,7 @@ export class PhotoEditor {
     this.loadingDone.set(0);
     this.loadingCount.set(restored ? 0 : 1);
     this.pendingMessage.set('');
-    this.errorMessage.set('');
+    this.errorKey.set(null);
     const createdDate = readCreatedDate(file);
     try {
       const display = await this.openDisplayImage(file, () => {
@@ -964,7 +987,7 @@ export class PhotoEditor {
       });
       this.orientation.set(restored?.orientation ?? imageOrientation(display.image));
       this.pendingMessage.set('');
-      this.errorMessage.set('');
+      this.errorKey.set(null);
       this.loadingCount.set(0);
       if (restored && loadId === this.loadId) {
         this.pan.set({ x: restored.panX, y: restored.panY });
@@ -997,17 +1020,13 @@ export class PhotoEditor {
           this.captionModel.update((current) => ({ ...current, right: '' }));
           this.useCreatedDate(date, loadId);
         }
-        this.errorMessage.set(
-          this.photo() === null && date
-            ? 'This browser cannot display HEIC photos. The created date was filled in from the file.'
-            : 'This browser cannot display HEIC photos.',
-        );
+        this.errorKey.set({
+          key: this.photo() === null && date ? 'error.heicDate' : 'error.heic',
+        });
         return;
       }
 
-      this.errorMessage.set(
-        'That file could not be opened. Please choose a JPEG, PNG, WebP, or HEIC image.',
-      );
+      this.errorKey.set({ key: 'error.openFile' });
     }
   }
 
@@ -1189,8 +1208,8 @@ export class PhotoEditor {
     }
 
     this.preparingDownloads.set(true);
-    this.downloadNotice.set('');
-    this.errorMessage.set('');
+    this.downloadKey.set(null);
+    this.errorKey.set(null);
     try {
       await document.fonts?.load('400 16px Geist')?.catch(() => undefined);
       const used = new Map<string, number>();
@@ -1218,9 +1237,8 @@ export class PhotoEditor {
       }
       await this.recordExports(edits);
     } catch {
-      const message = 'The framed photos could not be created.';
-      this.downloadNotice.set(message);
-      this.errorMessage.set(message);
+      this.downloadKey.set({ key: 'error.frames' });
+      this.errorKey.set({ key: 'error.frames' });
     } finally {
       this.preparingDownloads.set(false);
     }
@@ -1402,9 +1420,9 @@ export class PhotoEditor {
     this.restoreOffer.set(null);
     this.restoring.set(false);
     this.restoreDone.set(0);
-    this.restoreMilestone.set('');
+    this.milestone.set(null);
     if (edits.length === 0) {
-      this.errorMessage.set('The previous session could not be restored.');
+      this.errorKey.set({ key: 'error.session' });
       await this.sessionStore.clear().catch(() => undefined);
       return;
     }
@@ -1429,15 +1447,14 @@ export class PhotoEditor {
       return;
     }
 
-    const photos = total === 1 ? 'photo' : 'photos';
     if (done === 0) {
-      this.restoreMilestone.set(`Restoring ${total} ${photos}.`);
+      this.milestone.set({ kind: 'start', done, total });
       return;
     }
 
     const step = Math.max(1, Math.ceil(total / 10));
     if (done % step === 0) {
-      this.restoreMilestone.set(`Restored ${done} of ${total} ${photos}.`);
+      this.milestone.set({ kind: 'done', done, total });
     }
   }
 
@@ -1490,6 +1507,18 @@ export class PhotoEditor {
     void this.sessionStore.write(session, { images, handles }).catch(() => undefined);
   }
 
+  private plural(count: number): 'one' | 'few' | 'other' {
+    return pluralForm(this.transloco.activeLang() as LanguageId, count);
+  }
+
+  private translateMessage(message: TextMessage | null): string {
+    this.transloco.activeLang();
+    if (!message) {
+      return '';
+    }
+    return this.transloco.translate(message.key, message.params);
+  }
+
   private revokePhoto(): void {
     const photo = this.photo();
     if (photo && !this.session.holds(photo.objectUrl)) {
@@ -1502,14 +1531,25 @@ function imageOrientation(image: HTMLImageElement): Orientation {
   return orientationOf(image.naturalWidth, image.naturalHeight);
 }
 
-function incomingError(failure: IncomingFailure, noPhoto: boolean): string {
+function incomingError(failure: IncomingFailure, noPhoto: boolean): TextMessage {
   if (!failure.heic) {
-    return 'That file could not be opened. Please choose a JPEG, PNG, WebP, or HEIC image.';
+    return { key: 'error.openFile' };
   }
   if (noPhoto && failure.date) {
-    return 'This browser cannot display HEIC photos. The created date was filled in from the file.';
+    return { key: 'error.heicDate' };
   }
-  return 'This browser cannot display HEIC photos.';
+  return { key: 'error.heic' };
+}
+
+interface TextMessage {
+  key: string;
+  params?: Record<string, string | number>;
+}
+
+interface RestoreMilestone {
+  kind: 'start' | 'done';
+  done: number;
+  total: number;
 }
 
 function wheelDistance(event: WheelEvent): number {

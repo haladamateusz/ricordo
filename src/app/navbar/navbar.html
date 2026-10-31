@@ -17,7 +17,7 @@
     #menuButton
     type="button"
     class="menu"
-    aria-label="Open edits"
+    [attr.aria-label]="'nav.openEdits' | transloco"
     aria-controls="edits-dialog"
     [attr.aria-expanded]="drawer.open()"
     (click)="drawer.show()"
