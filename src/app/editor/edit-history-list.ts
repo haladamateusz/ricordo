@@ -1,6 +1,7 @@
 import {
   afterRenderEffect,
   Component,
+  computed,
   DestroyRef,
   ElementRef,
   inject,
@@ -109,6 +110,14 @@ export class EditHistoryList {
     estimateSize: () => historyRowHeight,
     overscan: 4,
   }));
+
+  protected readonly editPlace = computed(() => {
+    const edits = this.session.edits();
+    const index = edits.findIndex((edit) => edit.id === this.session.activeId());
+    return index < 0 ? 1 : index + 1;
+  });
+
+  protected readonly editTotal = computed(() => this.session.edits().length);
 
   protected captionPreview(caption: string): string {
     const previewLength = 20;

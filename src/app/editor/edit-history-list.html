@@ -116,6 +116,11 @@
           <p class="history-empty">No current edits</p>
         } @else {
           <div class="current-toolbar">
+            <p class="edit-count">
+              <span class="edit-count-label">Photo </span
+              ><span class="edit-count-value">{{ editPlace() }}</span> of
+              <span class="edit-count-value">{{ editTotal() }}</span>
+            </p>
             <button
               type="button"
               class="download-all"

@@ -176,6 +176,28 @@ describe('EditHistoryList', () => {
     expect(fixture.nativeElement.querySelector('.history-open')?.getAttribute('aria-current')).toBe(
       'true',
     );
+    expect(editCount(fixture)).toBe('Photo 1 of 1');
+  });
+
+  it('shows where the open edit sits in the current batch', async () => {
+    const fixture = await create();
+    const session = fixture.debugElement.injector.get(CurrentSession);
+    const oldest = session.begin(currentDraft('oldest.png', 'Oldest'));
+    session.begin(currentDraft('middle.png', 'Middle'));
+    session.begin(currentDraft('newest.png', 'Newest'));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.edit-count')).toBeNull();
+
+    tab(fixture, 'Current edits').click();
+    await vi.waitFor(() => {
+      expect(editCount(fixture)).toBe('Photo 1 of 3');
+    });
+
+    session.activate(oldest);
+    fixture.detectChanges();
+
+    expect(editCount(fixture)).toBe('Photo 3 of 3');
   });
 
   it('offers each saved edit as a button', async () => {
@@ -675,6 +697,13 @@ class MemoryHandles implements FileHandleDb {
       this.values.delete(id);
     }
   }
+}
+
+function editCount(fixture: ComponentFixture<EditHistoryList>): string {
+  return (
+    fixture.nativeElement.querySelector('.edit-count')?.textContent?.replace(/\s+/g, ' ').trim() ??
+    ''
+  );
 }
 
 function text(fixture: ComponentFixture<EditHistoryList>): string {

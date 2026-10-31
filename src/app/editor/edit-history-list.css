@@ -206,6 +206,32 @@
   padding: 0 0.4rem 0.15rem;
 }
 
+.edit-count {
+  margin: 0.2rem auto 0.2rem 0.35rem;
+  align-self: center;
+  color: color-mix(in srgb, var(--text) 72%, transparent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.edit-count-value {
+  font-weight: 700;
+}
+
+.edit-count-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .download-all,
 .sort-oldest {
   min-height: 2rem;
@@ -494,6 +520,11 @@
   .current-toolbar {
     gap: 0.5rem;
     padding: 0 0.65rem 0.65rem;
+  }
+
+  .edit-count {
+    flex: 1 0 100%;
+    margin: 0 0.15rem;
   }
 
   .download-all,
