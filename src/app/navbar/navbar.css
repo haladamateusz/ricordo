@@ -5,6 +5,10 @@
   display: block;
 }
 
+:host.is-language-open {
+  z-index: 6;
+}
+
 .navbar {
   display: flex;
   height: var(--navbar-height);
@@ -14,11 +18,17 @@
   padding-inline: 1.25rem;
 }
 
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  margin-inline-start: auto;
+}
+
 .menu {
   display: none;
   width: 2.75rem;
   height: 2.75rem;
-  margin-inline-start: auto;
   align-items: center;
   justify-content: center;
   border: 0;

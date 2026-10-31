@@ -1,0 +1,95 @@
+<button
+  #trigger
+  type="button"
+  class="trigger"
+  [attr.aria-haspopup]="compact() ? 'dialog' : 'menu'"
+  aria-controls="language-menu"
+  [attr.aria-expanded]="isOpen()"
+  [attr.aria-label]="'language.choose' | transloco: { language: current().label }"
+  (click)="toggle()"
+  (keydown)="onTriggerKeydown($event)"
+>
+  <svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="m5 8 6 6M4 14l6-6 2-3M2 5h12M7 2h1m15 20-5-10-5 10M14 18h6"
+      stroke="currentColor"
+      stroke-width="1.8"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </svg>
+  <span class="code">{{ current().code }}</span>
+</button>
+
+@if (isOpen() || compact()) {
+  <div
+    #panel
+    id="language-menu"
+    class="panel"
+    [class.is-open]="isOpen()"
+    [attr.role]="isOpen() ? (compact() ? 'dialog' : 'menu') : null"
+    [attr.aria-modal]="sheetOpen() ? 'true' : null"
+    [attr.aria-hidden]="isOpen() ? null : 'true'"
+    [attr.inert]="isOpen() ? null : ''"
+    [attr.aria-labelledby]="sheetOpen() ? 'language-title' : null"
+    [attr.aria-label]="isOpen() && !compact() ? ('language.menu' | transloco) : null"
+  >
+    <div class="titlebar">
+      <h2 id="language-title" class="title">{{ 'language.menu' | transloco }}</h2>
+      <button
+        #closeButton
+        type="button"
+        class="close"
+        [attr.aria-label]="'language.close' | transloco"
+        (click)="dismiss()"
+      >
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d="M6 6l12 12M18 6L6 18"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+          />
+        </svg>
+      </button>
+    </div>
+    <div
+      class="options"
+      [attr.role]="compact() ? 'listbox' : null"
+      [attr.aria-label]="compact() ? ('language.menu' | transloco) : null"
+    >
+      @for (language of languages; track language.id) {
+        <button
+          #option
+          type="button"
+          class="option"
+          [class.is-selected]="language.id === appLanguage.id()"
+          [attr.role]="compact() ? 'option' : 'menuitemradio'"
+          [attr.lang]="language.id"
+          [attr.data-lang]="language.id"
+          [attr.aria-selected]="compact() ? language.id === appLanguage.id() : null"
+          [attr.aria-checked]="compact() ? null : language.id === appLanguage.id()"
+          (click)="select(language.id)"
+          (keydown)="onMenuKeydown($event)"
+        >
+          <span>{{ language.label }}</span>
+          <svg
+            class="check"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+            [attr.visibility]="language.id === appLanguage.id() ? 'visible' : 'hidden'"
+          >
+            <path
+              d="M5 12.5 9.2 16.5 19 7.5"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+      }
+    </div>
+  </div>
+}

@@ -34,6 +34,14 @@ describe('Navbar', () => {
     expect(home?.getAttribute('aria-current')).toBe('page');
   });
 
+  it('places the language control before the edits button', () => {
+    const compiled = fixture.nativeElement as HTMLElement;
+    const language = compiled.querySelector('app-language-menu');
+    const menu = compiled.querySelector('.menu');
+
+    expect(language?.nextElementSibling).toBe(menu);
+  });
+
   it('opens the edits dialog from the menu button', () => {
     const drawer = TestBed.inject(EditDrawer);
     const menu = fixture.nativeElement.querySelector('.menu') as HTMLButtonElement;
