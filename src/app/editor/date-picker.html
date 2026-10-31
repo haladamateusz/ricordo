@@ -25,10 +25,14 @@
 
 @if (isOpen()) {
   <div
+    #dialog
     [id]="panelId()"
     class="date-picker__dialog"
     role="dialog"
-    [attr.aria-label]="'date.choose' | transloco"
+    [class.date-picker__dialog--years]="pickingYear()"
+    [style.--calendar-width.px]="calendarWidth() || null"
+    [style.--calendar-height.px]="calendarHeight() || null"
+    [attr.aria-label]="pickingYear() ? chooseYearLabel() : ('date.choose' | transloco)"
   >
     @if (isCalendarReady()) {
       <calendar-date
@@ -40,6 +44,8 @@
         first-day-of-week="1"
         show-outside-days
         (change)="selectDate($event)"
+        (click)="syncVisibleYear()"
+        (keyup)="syncVisibleYear()"
       >
         <svg slot="previous" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
           <path
@@ -55,11 +61,45 @@
             clip-rule="evenodd"
           />
         </svg>
-        <calendar-select-year slot="heading" [attr.max-years]="yearCount()">
-          <span slot="label">{{ 'date.year' | transloco }}</span>
-        </calendar-select-year>
-        <calendar-month />
+        <button
+          #yearButton
+          slot="heading"
+          type="button"
+          class="date-picker__year"
+          [attr.aria-expanded]="pickingYear()"
+          [attr.aria-controls]="yearsId()"
+          [attr.aria-label]="chooseYearLabel()"
+          (click)="toggleYears()"
+        >
+          {{ visibleYear() }}
+        </button>
+        <calendar-month [class.date-picker__month--hidden]="pickingYear()" />
       </calendar-date>
+      @if (pickingYear()) {
+        <div
+          [id]="yearsId()"
+          class="date-picker__years"
+          role="group"
+          [attr.aria-label]="'date.year' | transloco"
+        >
+          @for (year of years(); track year) {
+            <button
+              #yearOption
+              type="button"
+              class="date-picker__year-option"
+              [class.date-picker__year-option--current]="year === visibleYear()"
+              [class.date-picker__year-option--today]="year === todayYear()"
+              [attr.data-year]="year"
+              [attr.tabindex]="year === activeYear() ? 0 : -1"
+              [attr.aria-current]="year === visibleYear() ? 'true' : null"
+              (click)="chooseYear(year)"
+              (keydown)="onYearKey($event, year)"
+            >
+              {{ year }}
+            </button>
+          }
+        </div>
+      }
     } @else {
       <div class="date-picker__loading" role="status">{{ 'date.loading' | transloco }}</div>
     }

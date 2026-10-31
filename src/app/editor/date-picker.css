@@ -137,19 +137,7 @@ calendar-date::part(heading) {
   font-weight: 700;
 }
 
-calendar-select-year::part(label) {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-}
-
-calendar-select-year::part(select) {
+.date-picker__year {
   border: 0;
   border-radius: 0.45rem;
   background: transparent;
@@ -157,19 +145,88 @@ calendar-select-year::part(select) {
   color: inherit;
   font: inherit;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
   text-align: center;
   cursor: pointer;
 }
 
-calendar-select-year::part(select):hover,
-calendar-select-year::part(select):focus-visible {
+.date-picker__year:hover,
+.date-picker__year:focus-visible,
+.date-picker__year[aria-expanded='true'] {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
 }
 
-calendar-select-year::part(select):focus-visible {
+.date-picker__year:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+.date-picker__dialog--years {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: max-content;
+  min-height: var(--calendar-height);
+}
+
+.date-picker__dialog--years calendar-date {
+  width: 100%;
+  inline-size: 100%;
+}
+
+.date-picker__dialog--years calendar-date::part(button) {
+  visibility: hidden;
+}
+
+.date-picker__month--hidden {
+  display: none;
+}
+
+.date-picker__years {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-content: start;
+  gap: 0.35rem 0.15rem;
+  width: var(--calendar-width);
+  margin-top: 0.15rem;
+}
+
+.date-picker__year-option {
+  min-width: 0;
+  height: 2.25rem;
+  border: 0;
+  border-radius: 0.7rem;
+  background: transparent;
+  padding: 0;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.date-picker__year-option:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.date-picker__year-option:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.date-picker__year-option--current {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.date-picker__year-option--current:hover {
+  background: var(--accent-hover);
+}
+
+.date-picker__year-option--today:not(.date-picker__year-option--current) {
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 calendar-month::part(month) {
@@ -237,5 +294,13 @@ calendar-month::part(selected) {
     width: 100%;
     height: auto;
     aspect-ratio: 1;
+  }
+
+  .date-picker__dialog--years {
+    width: 100%;
+  }
+
+  .date-picker__years {
+    width: 100%;
   }
 }

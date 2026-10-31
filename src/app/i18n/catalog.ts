@@ -50,8 +50,7 @@ const messages = {
       orientationTo: 'Orientation to {{width}} by {{height}}',
       remove: 'Remove',
       download: 'Download',
-      stage:
-        'Framed photo, {{fileName}}. Drag or use arrow keys to reposition. Scroll to scale.',
+      stage: 'Framed photo, {{fileName}}. Drag or use arrow keys to reposition. Scroll to scale.',
       file: 'Project file',
     },
     loading: {
@@ -64,6 +63,7 @@ const messages = {
       previous: 'Previous month',
       next: 'Next month',
       year: 'Year',
+      chooseYear: 'Choose year {{year}}',
       loading: 'Loading calendar...',
     },
     restore: {
@@ -171,6 +171,7 @@ const messages = {
       previous: 'Poprzedni miesiąc',
       next: 'Następny miesiąc',
       year: 'Rok',
+      chooseYear: 'Wybierz rok {{year}}',
       loading: 'Wczytywanie kalendarza...',
     },
     restore: {
@@ -278,6 +279,7 @@ const messages = {
       previous: 'Mese precedente',
       next: 'Mese successivo',
       year: 'Anno',
+      chooseYear: "Scegli l'anno {{year}}",
       loading: 'Caricamento calendario...',
     },
     restore: {
@@ -358,7 +360,8 @@ const messages = {
       picked: '{{label}} ausgewählt. {{count}} ausgewählt.',
       unpicked: '{{label}} abgewählt. {{count}} ausgewählt.',
       moved: '{{label}} auf Position {{position}} von {{total}} verschoben.',
-      movedGroup: '{{count}} Bearbeitungen gemeinsam auf die Positionen {{from}} bis {{to}} verschoben.',
+      movedGroup:
+        '{{count}} Bearbeitungen gemeinsam auf die Positionen {{from}} bis {{to}} verschoben.',
     },
     photo: {
       choose: 'Foto auswählen',
@@ -385,6 +388,7 @@ const messages = {
       previous: 'Vorheriger Monat',
       next: 'Nächster Monat',
       year: 'Jahr',
+      chooseYear: 'Jahr {{year}} wählen',
       loading: 'Kalender wird geladen...',
     },
     restore: {
@@ -466,7 +470,8 @@ const messages = {
       picked: '{{label}} tschernida. {{count}} tschernidas.',
       unpicked: '{{label}} betg pli tschernida. {{count}} tschernidas.',
       moved: '{{label}} spustada sin la posiziun {{position}} da {{total}}.',
-      movedGroup: '{{count}} modificaziuns spustadas ensemen sin las posiziuns {{from}} fin {{to}}.',
+      movedGroup:
+        '{{count}} modificaziuns spustadas ensemen sin las posiziuns {{from}} fin {{to}}.',
     },
     photo: {
       choose: 'Tscherna ina fotografia',
@@ -493,6 +498,7 @@ const messages = {
       previous: 'Mais precedent',
       next: 'Proxim mais',
       year: 'Onn',
+      chooseYear: "Tscherna l'onn {{year}}",
       loading: 'Chargiar il chalender...',
     },
     restore: {

@@ -13,16 +13,25 @@ import {
   output,
   signal,
   viewChild,
+  viewChildren,
 } from '@angular/core';
 import { FormValueControl } from '@angular/forms/signals';
 import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
 
 interface CalendarDateElement extends HTMLElement {
   value: string;
+  focusedDate: string;
   focus(options?: FocusOptions & { target?: 'day' | 'next' | 'previous' }): void;
 }
 
+interface CalendarDay {
+  year: number;
+  month: number;
+  day: number;
+}
+
 const earliestYear = 2017;
+const yearColumns = 5;
 
 export function toLocalIsoDate(date: Date): string {
   const year = date.getFullYear().toString().padStart(4, '0');
@@ -32,8 +41,9 @@ export function toLocalIsoDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-export function selectableYearCount(latestYear: number): number {
-  return Math.max(latestYear - earliestYear, 0) * 2 + 1;
+export function selectableYears(latestYear: number): number[] {
+  const end = Math.max(latestYear, earliestYear);
+  return Array.from({ length: end - earliestYear + 1 }, (_, index) => earliestYear + index);
 }
 
 const captionLocale = signal('en-GB');
@@ -112,6 +122,40 @@ function parseLocalDateValue(value: string): Date | null {
   return date;
 }
 
+function focusedParts(value: unknown): CalendarDay | null {
+  if (typeof value === 'string') {
+    const date = parseLocalDateValue(value);
+    if (!date) {
+      return null;
+    }
+    return { year: date.getFullYear(), month: date.getMonth() + 1, day: date.getDate() };
+  }
+
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const year = record['year'];
+  const month = record['month'];
+  const day = record['day'];
+  if (typeof year !== 'number' || typeof month !== 'number' || typeof day !== 'number') {
+    return null;
+  }
+
+  return { year, month, day };
+}
+
+function clampDate(date: Date, min: Date, max: Date): Date {
+  if (date.getTime() < min.getTime()) {
+    return min;
+  }
+  if (date.getTime() > max.getTime()) {
+    return max;
+  }
+  return date;
+}
+
 function captionClock(value: string): string | null {
   const match = /^\d{4}-\d{2}-\d{2}[T ](\d{2}):(\d{2}):(\d{2})$/.exec(value.trim());
   if (!match) {
@@ -149,8 +193,14 @@ export class DatePicker implements FormValueControl<string> {
   private readonly transloco = inject(TranslocoService);
   private readonly isBrowser = isPlatformBrowser(this.platformId);
   private readonly trigger = viewChild<ElementRef<HTMLButtonElement>>('trigger');
+  private readonly yearButton = viewChild<ElementRef<HTMLButtonElement>>('yearButton');
+  private readonly yearOptions = viewChildren<ElementRef<HTMLButtonElement>>('yearOption');
+  private readonly dialog = viewChild<ElementRef<HTMLElement>>('dialog');
   private readonly calendar = viewChild<ElementRef<CalendarDateElement>>('calendar');
   private pointerInside = false;
+  private visibleMonth = new Date().getMonth() + 1;
+  private visibleDay = new Date().getDate();
+  private pendingYearFocus: number | null = null;
 
   readonly value = model.required<string>();
   readonly disabled = model(false);
@@ -161,10 +211,21 @@ export class DatePicker implements FormValueControl<string> {
   protected readonly earliestDate = `${earliestYear}-01-01`;
   protected readonly isOpen = signal(false);
   protected readonly isCalendarReady = signal(false);
+  protected readonly pickingYear = signal(false);
   protected readonly maxDate = signal(toLocalIsoDate(new Date()));
-  protected readonly yearCount = signal(selectableYearCount(new Date().getFullYear()));
+  protected readonly visibleYear = signal(new Date().getFullYear());
+  protected readonly activeYear = signal(new Date().getFullYear());
+  protected readonly calendarWidth = signal(0);
+  protected readonly calendarHeight = signal(0);
   protected readonly panelId = computed(() => `${this.controlId()}-dialog`);
+  protected readonly yearsId = computed(() => `${this.controlId()}-years`);
   protected readonly calendarLocale = computed(() => captionLocaleId());
+  protected readonly years = computed(() => selectableYears(Number(this.maxDate().slice(0, 4))));
+  protected readonly todayYear = computed(() => Number(this.maxDate().slice(0, 4)));
+  protected readonly chooseYearLabel = computed(() => {
+    this.transloco.activeLang();
+    return this.transloco.translate('date.chooseYear', { year: this.visibleYear() });
+  });
   protected readonly displayValue = computed(
     () => formatCaptionDate(this.value()) || this.placeholder(),
   );
@@ -208,6 +269,23 @@ export class DatePicker implements FormValueControl<string> {
       };
       apply();
       onCleanup(() => cancelAnimationFrame(frame));
+    });
+
+    afterRenderEffect(() => {
+      const picking = this.pickingYear();
+      const options = this.yearOptions();
+      const year = this.pendingYearFocus;
+      if (!picking || year === null) {
+        return;
+      }
+      const button = options.find(
+        (option) => option.nativeElement.dataset['year'] === String(year),
+      );
+      if (!button) {
+        return;
+      }
+      this.pendingYearFocus = null;
+      button.nativeElement.focus();
     });
   }
 
@@ -304,9 +382,9 @@ export class DatePicker implements FormValueControl<string> {
       return;
     }
 
-    // Month buttons and the year menu live in the calendar shadow tree.
-    // WebKit reports that focus move with a null relatedTarget, which used
-    // to dismiss the dialog before the month or year could change.
+    // Month buttons live in the calendar shadow tree. WebKit reports that
+    // focus move with a null relatedTarget, which used to dismiss the dialog
+    // before the month could change.
     if (nextTarget === null && this.containsEventTarget(event.target)) {
       return;
     }
@@ -321,6 +399,106 @@ export class DatePicker implements FormValueControl<string> {
 
   protected close(): void {
     this.isOpen.set(false);
+    this.pickingYear.set(false);
+  }
+
+  protected syncVisibleYear(): void {
+    this.remember(this.readVisibleDay());
+  }
+
+  protected toggleYears(): void {
+    if (this.pickingYear()) {
+      this.closeYears();
+      return;
+    }
+
+    const width = this.calendar()?.nativeElement.getBoundingClientRect().width ?? 0;
+    const height = this.dialog()?.nativeElement.getBoundingClientRect().height ?? 0;
+    if (width > 0) {
+      this.calendarWidth.set(Math.ceil(width));
+    }
+    if (height > 0) {
+      this.calendarHeight.set(Math.ceil(height));
+    }
+    this.remember(this.readVisibleDay());
+    this.activeYear.set(this.visibleYear());
+    this.pendingYearFocus = this.visibleYear();
+    this.pickingYear.set(true);
+  }
+
+  protected chooseYear(year: number): void {
+    const min = parseLocalDateValue(this.earliestDate) ?? new Date(earliestYear, 0, 1);
+    const max = parseLocalDateValue(this.maxDate()) ?? new Date();
+    const monthIndex = this.visibleMonth - 1;
+    const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+    const target = clampDate(
+      new Date(year, monthIndex, Math.min(this.visibleDay, lastDay)),
+      min,
+      max,
+    );
+    const calendar = this.calendar()?.nativeElement;
+    if (calendar) {
+      calendar.focusedDate = toLocalIsoDate(target);
+    }
+    this.remember({
+      year: target.getFullYear(),
+      month: target.getMonth() + 1,
+      day: target.getDate(),
+    });
+    this.pickingYear.set(false);
+    this.focusCalendar();
+  }
+
+  protected onYearKey(event: KeyboardEvent, year: number): void {
+    const years = this.years();
+    const index = years.indexOf(year);
+    if (index < 0) {
+      return;
+    }
+
+    let next = index;
+    switch (event.key) {
+      case 'ArrowRight':
+        next = Math.min(years.length - 1, index + 1);
+        break;
+      case 'ArrowLeft':
+        next = Math.max(0, index - 1);
+        break;
+      case 'ArrowDown':
+        next = Math.min(years.length - 1, index + yearColumns);
+        break;
+      case 'ArrowUp':
+        next = Math.max(0, index - yearColumns);
+        break;
+      case 'Home':
+        next = 0;
+        break;
+      case 'End':
+        next = years.length - 1;
+        break;
+      case 'Escape':
+        event.preventDefault();
+        event.stopPropagation();
+        this.closeYears();
+        return;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    const target = years[next];
+    if (target === undefined) {
+      return;
+    }
+    this.activeYear.set(target);
+    this.yearOptions()
+      .find((option) => option.nativeElement.dataset['year'] === String(target))
+      ?.nativeElement.focus();
+  }
+
+  private closeYears(): void {
+    this.pickingYear.set(false);
+    this.yearButton()?.nativeElement.focus();
   }
 
   private open(): void {
@@ -330,9 +508,35 @@ export class DatePicker implements FormValueControl<string> {
 
     const today = new Date();
     this.maxDate.set(toLocalIsoDate(today));
-    this.yearCount.set(selectableYearCount(today.getFullYear()));
+    this.remember(this.readVisibleDay());
+    this.pickingYear.set(false);
     this.isOpen.set(true);
     this.focusCalendar();
+  }
+
+  private readVisibleDay(): CalendarDay {
+    const focused = focusedParts(this.calendar()?.nativeElement.focusedDate);
+    if (focused) {
+      return focused;
+    }
+
+    const selected = parseLocalDateValue(this.calendarDate());
+    if (selected) {
+      return {
+        year: selected.getFullYear(),
+        month: selected.getMonth() + 1,
+        day: selected.getDate(),
+      };
+    }
+
+    const today = new Date();
+    return { year: today.getFullYear(), month: today.getMonth() + 1, day: today.getDate() };
+  }
+
+  private remember(day: CalendarDay): void {
+    this.visibleYear.set(day.year);
+    this.visibleMonth = day.month;
+    this.visibleDay = day.day;
   }
 
   private containsEventTarget(target: EventTarget | null): boolean {
