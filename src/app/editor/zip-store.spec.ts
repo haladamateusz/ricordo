@@ -22,7 +22,40 @@ describe('zipStored', () => {
     ]);
     expect(bytes.subarray(14, 18)).toEqual(uint32(0xcbf43926));
   });
+
+  it('rejects a truncated archive', async () => {
+    const bytes = await archive();
+
+    expect(readStoredZip(bytes.subarray(0, bytes.byteLength - 8))).toBeNull();
+  });
+
+  it('rejects a compressed entry', async () => {
+    const bytes = await archive();
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    view.setUint16(centralStart(bytes) + 10, 8, true);
+
+    expect(readStoredZip(bytes)).toBeNull();
+  });
+
+  it('rejects an entry whose checksum does not match', async () => {
+    const bytes = await archive();
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const crcAt = centralStart(bytes) + 16;
+    view.setUint32(crcAt, view.getUint32(crcAt, true) ^ 0xffffffff, true);
+
+    expect(readStoredZip(bytes)).toBeNull();
+  });
 });
+
+async function archive(): Promise<Uint8Array> {
+  const zip = zipStored([{ name: 'note.txt', bytes: text('hello') }]);
+  return new Uint8Array(await zip.arrayBuffer());
+}
+
+function centralStart(bytes: Uint8Array): number {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return view.getUint32(bytes.byteLength - 6, true);
+}
 
 function text(value: string): Uint8Array {
   return new TextEncoder().encode(value);

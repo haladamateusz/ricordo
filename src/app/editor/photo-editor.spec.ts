@@ -23,6 +23,7 @@ import {
   type StoredSession,
 } from './current-session-store';
 import { provideAppTranslations } from '../i18n/provide-app-translations';
+import { buildFrameLayout, clampUnit, coverSlack } from './frame-layout';
 import { PhotoEditor } from './photo-editor';
 import { ProjectActions } from './project-actions';
 import { projectArchive, readProjectArchive, type ProjectPhoto } from './project-archive';
@@ -1058,6 +1059,120 @@ describe('PhotoEditor', () => {
     expect(state(fixture).zoom()).toBe(1);
   });
 
+  it('drags the photo in the direction of the pointer', async () => {
+    await loadPortrait(fixture);
+    state(fixture).zoom.set(2);
+    const canvas = fixture.nativeElement.querySelector('canvas') as HTMLCanvasElement;
+    const screenWidth = 200;
+    canvas.getBoundingClientRect = () => new DOMRect(0, 0, screenWidth, 300);
+    const overlay = fixture.nativeElement.querySelector('.photo-overlay') as HTMLElement;
+    overlay.setPointerCapture = () => undefined;
+
+    const layout = buildFrameLayout('portrait');
+    const slack = coverSlack(
+      FakeImage.size.width,
+      FakeImage.size.height,
+      layout.photo.width,
+      layout.photo.height,
+      2,
+    );
+    const scale = layout.canvas.width / screenWidth;
+    const dx = 60 * scale;
+    const dy = -30 * scale;
+
+    overlay.dispatchEvent(
+      new PointerEvent('pointerdown', { button: 0, clientX: 80, clientY: 90, pointerId: 1 }),
+    );
+    overlay.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: 140, clientY: 60, pointerId: 1 }),
+    );
+
+    const pan = state(fixture).pan();
+    expect(pan.x).toBeCloseTo(clampUnit(0.5 - dx / slack.maxPanX));
+    expect(pan.y).toBeCloseTo(clampUnit(0.5 - dy / slack.maxPanY));
+    expect(pan.x).toBeLessThan(0.5);
+    expect(pan.y).toBeGreaterThan(0.5);
+  });
+
+  it('leaves the photo in place when a control on it is pressed', async () => {
+    await loadPortrait(fixture);
+    state(fixture).zoom.set(2);
+    const replace = button(fixture, 'Replace');
+
+    replace.dispatchEvent(
+      new PointerEvent('pointerdown', { button: 0, bubbles: true, clientX: 4, clientY: 4 }),
+    );
+    replace.dispatchEvent(
+      new PointerEvent('pointermove', { bubbles: true, clientX: 80, clientY: 40 }),
+    );
+
+    expect(state(fixture).pan()).toEqual({ x: 0.5, y: 0.5 });
+  });
+
+  it('nudges the photo with the arrow keys', async () => {
+    await loadPortrait(fixture);
+    state(fixture).zoom.set(2);
+    const stage = fixture.nativeElement.querySelector('.stage') as HTMLElement;
+
+    stage.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', cancelable: true }));
+
+    const afterRight = state(fixture).pan();
+    expect(afterRight.x).toBeLessThan(0.5);
+    expect(afterRight.x).toBeGreaterThan(0.4);
+    expect(afterRight.y).toBeCloseTo(0.5);
+
+    stage.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', cancelable: true }));
+
+    const afterUp = state(fixture).pan();
+    expect(afterUp.y).toBeGreaterThan(0.5);
+    expect(afterUp.x).toBeCloseTo(afterRight.x);
+  });
+
+  it('keeps the point under the cursor when the photo is zoomed', async () => {
+    await loadPortrait(fixture);
+    const overlay = fixture.nativeElement.querySelector('.photo-overlay') as HTMLElement;
+    const bounds = new DOMRect(10, 20, 200, 300);
+    overlay.getBoundingClientRect = () => bounds;
+    const clientX = 40;
+    const clientY = 50;
+    const layout = buildFrameLayout('portrait');
+    const focalX = ((clientX - bounds.left) / bounds.width) * layout.photo.width;
+    const focalY = ((clientY - bounds.top) / bounds.height) * layout.photo.height;
+    const before = framedPoint(
+      FakeImage.size.width,
+      FakeImage.size.height,
+      layout.photo.width,
+      layout.photo.height,
+      0.5,
+      0.5,
+      1,
+      focalX,
+      focalY,
+    );
+
+    overlay.dispatchEvent(
+      new WheelEvent('wheel', { deltaY: -400, clientX, clientY, cancelable: true }),
+    );
+
+    const pan = state(fixture).pan();
+    const zoom = state(fixture).zoom();
+    const after = framedPoint(
+      FakeImage.size.width,
+      FakeImage.size.height,
+      layout.photo.width,
+      layout.photo.height,
+      pan.x,
+      pan.y,
+      zoom,
+      focalX,
+      focalY,
+    );
+    expect(zoom).toBeGreaterThan(1);
+    expect(pan).not.toEqual({ x: 0.5, y: 0.5 });
+    expect(after.x).toBeCloseTo(before.x);
+    expect(after.y).toBeCloseTo(before.y);
+  });
+
   it('stores the open photo for the next visit', async () => {
     const file = new File(['photo'], 'dog.png', { type: 'image/png' });
     const handle = fileHandle(file);
@@ -1508,6 +1623,24 @@ async function loadPicked(fixture: ComponentFixture<PhotoEditor>, file: File): P
   await vi.waitFor(() => {
     expect(text(fixture)).toContain(file.name);
   });
+}
+
+function framedPoint(
+  imageWidth: number,
+  imageHeight: number,
+  frameWidth: number,
+  frameHeight: number,
+  panX: number,
+  panY: number,
+  zoom: number,
+  focalX: number,
+  focalY: number,
+): { x: number; y: number } {
+  const slack = coverSlack(imageWidth, imageHeight, frameWidth, frameHeight, zoom);
+  return {
+    x: (clampUnit(panX) * slack.maxPanX + focalX) / slack.scale,
+    y: (clampUnit(panY) * slack.maxPanY + focalY) / slack.scale,
+  };
 }
 
 function caption(fixture: ComponentFixture<PhotoEditor>): string | null {
