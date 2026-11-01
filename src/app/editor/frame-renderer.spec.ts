@@ -31,6 +31,21 @@ describe('paintFrame', () => {
     ]);
   });
 
+  it('centers the date when the right caption is blank', () => {
+    const { context, captions } = recordingContext();
+
+    paintFrame(context, image, 4000, 2000, layout, 0.5, 0.5, 1, '12 września 2026', '   ');
+
+    expect(captions).toEqual([
+      {
+        text: '12 września 2026',
+        x: layout.photo.x + layout.photo.width / 2,
+        y: layout.captionCenterY,
+        align: 'center',
+      },
+    ]);
+  });
+
   it('skips a blank date', () => {
     const { context, captions } = recordingContext();
 

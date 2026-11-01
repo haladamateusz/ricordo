@@ -62,13 +62,14 @@ export function paintFrame(
     0,
     photo.width - dateWidth - (dateWidth > 0 ? captionGap : 0),
   );
+  const centerDate = rightCaption.trim() === '';
   paintCaption(
     ctx,
     leftCaption,
     layout.captionFontSizePx,
-    dateSlot,
-    'left',
-    layout.leftCaptionX,
+    centerDate ? photo.width : dateSlot,
+    centerDate ? 'center' : 'left',
+    centerDate ? photo.x + photo.width / 2 : layout.leftCaptionX,
     layout.captionCenterY,
   );
   paintCaption(
